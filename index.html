@@ -66,21 +66,30 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #111827; font-weight: 600; }
   .btn.stop { background: var(--live); border-color: var(--live); color: #111827; font-weight: 600; }
   .hint { color: var(--muted); font-size: .85rem; margin: .75rem 0 0; }
+  body.paired { grid-template-rows: auto 1fr auto; }
   body.paired .pair { display: none; }
 
   /* Stage */
   .stage { position: relative; background: #000; min-height: 50vh; display: grid; place-items: center; }
-  #remote { width: 100%; height: 100%; max-height: calc(100vh - 9rem); object-fit: contain; display: none; }
+  #remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; }
   body.watching #remote { display: block; }
   .empty { color: var(--muted); text-align: center; padding: 2rem; max-width: 40ch; }
   body.watching .empty { display: none; }
   .stage-tools {
-    position: absolute; top: .75rem; right: .75rem; display: none; gap: .5rem;
+    position: absolute; top: .75rem; right: .75rem; left: .75rem; display: none; gap: .5rem;
+    flex-wrap: wrap; justify-content: flex-end; align-items: center;
   }
   body.watching .stage-tools { display: flex; }
   .stage-tools .btn { background: rgba(27,33,48,.85); }
   #unmute { display: none; }
   #unmute.show { display: inline-block; }
+  .vol {
+    display: flex; align-items: center; gap: .5rem; padding-right: .6rem;
+    background: rgba(27,33,48,.85); border: 1px solid var(--line); border-radius: 6px;
+  }
+  .stage-tools .vol .btn { background: none; border: 0; min-width: 5.5em; }
+  #volume { width: 7rem; accent-color: var(--accent); }
+  #volPct { font-size: .8rem; color: var(--muted); min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
   #statsIn { position: absolute; left: .75rem; bottom: .75rem; display: none; }
   body.watching #statsIn { display: flex; }
 
@@ -101,7 +110,10 @@
   .mine { margin-left: auto; display: none; align-items: center; gap: .75rem; }
   body.sharing .mine { display: flex; }
   #localPreview { width: 160px; aspect-ratio: 16/9; background: #000; border: 2px solid var(--live); border-radius: 4px; }
-  #statsOut { display: flex; max-width: 22rem; }
+  .mine-info { display: flex; flex-direction: column; gap: .4rem; max-width: 22rem; }
+  #statsOut { display: flex; }
+  #audioNote { margin: 0; font-size: .8rem; color: var(--muted); }
+  #audioNote.warn { color: var(--live); }
 
   @media (max-width: 700px) {
     .pair { grid-template-columns: 1fr; }
@@ -139,6 +151,12 @@
     <video id="remote" autoplay playsinline></video>
     <div class="stage-tools">
       <button class="btn" id="unmute">Turn on sound</button>
+      <div class="vol">
+        <button class="btn" id="muteBtn" aria-pressed="false">Mute</button>
+        <input type="range" id="volume" min="0" max="100" value="100" aria-label="Volume">
+        <span id="volPct">100%</span>
+      </div>
+      <button class="btn" id="pip">Pop out</button>
       <button class="btn" id="fullscreen">Fullscreen</button>
     </div>
     <div class="stats row" id="statsIn"></div>
@@ -170,7 +188,10 @@
       </select>
     </label>
     <div class="mine">
-      <div class="stats row" id="statsOut"></div>
+      <div class="mine-info">
+        <div class="stats row" id="statsOut"></div>
+        <p id="audioNote" role="status"></p>
+      </div>
       <video id="localPreview" autoplay muted playsinline></video>
     </div>
   </footer>
@@ -259,8 +280,10 @@ async function startShare() {
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // restrictOwnAudio keeps this page's own sound (your friend's stream) out of system audio
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
       systemAudio: 'include',
+      windowAudio: 'window',                        // ask for just the chosen window's sound where supported
       selfBrowserSurface: 'exclude',
     });
   } catch (e) {
@@ -271,9 +294,35 @@ async function startShare() {
   vt.contentHint = $('mode').value;
   vt.addEventListener('ended', stopShare);          // browser's own "Stop sharing" bar
   $('localPreview').srcObject = localStream;
+  describeAudio(vt);
   document.body.classList.add('sharing');
   if (conn && conn.open) callFriend();
   else setStatus('Sharing is ready. It starts as soon as your friend connects.');
+}
+
+// Tell the sharer whether sound is going out, and how to fix it if not
+function describeAudio(vt) {
+  const note = $('audioNote');
+  const surface = vt.getSettings().displaySurface;
+  if (localStream.getAudioTracks().length) {
+    note.className = '';
+    note.textContent = surface === 'monitor'
+      ? 'Sharing all sound from your computer, including voice chat and notifications.'
+      : 'Sound is being shared.';
+    return;
+  }
+  note.className = 'warn';
+  if (navigator.userAgent.includes('Firefox')) {
+    note.textContent = 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.';
+  } else if (surface === 'window') {
+    note.textContent = 'No sound: this browser can’t share sound from a single window. Stop, then share your Entire screen with “Share system audio” ticked.';
+  } else if (surface === 'monitor') {
+    note.textContent = 'No sound: “Share system audio” wasn’t ticked. Stop and share again with it ticked.';
+  } else if (surface === 'browser') {
+    note.textContent = 'No sound: “Share tab audio” wasn’t ticked. Stop and share again with it ticked.';
+  } else {
+    note.textContent = 'No sound is being shared.';
+  }
 }
 
 function callFriend() {
@@ -291,6 +340,7 @@ function stopShare() {
   if (outCall) { outCall.close(); outCall = null; }
   if (conn && conn.open) conn.send({ type: 'stopped' });
   $('localPreview').srcObject = null;
+  $('audioNote').textContent = '';
   document.body.classList.remove('sharing');
   clearInterval(statTimers.out);
 }
@@ -337,16 +387,18 @@ async function showRemote(stream) {
   const v = $('remote');
   v.srcObject = stream;
   document.body.classList.add('watching');
-  v.muted = false;
+  v.muted = userMuted;
   try { await v.play(); $('unmute').classList.remove('show'); }
   catch (e) {                                       // autoplay with sound blocked
     v.muted = true;
     try { await v.play(); } catch (e2) {}
-    $('unmute').classList.add('show');
+    if (!userMuted) $('unmute').classList.add('show');
   }
+  syncMuteUi();
 }
 
 function hideRemote() {
+  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
   $('remote').srcObject = null;
   document.body.classList.remove('watching');
   clearInterval(statTimers.in);
@@ -383,6 +435,8 @@ function watchStats(getPc, dir) {
       if (lc) chips.push([lc.candidateType === 'relay' ? 'relayed' : 'direct', lc.candidateType === 'relay']);
       if (pair.currentRoundTripTime != null) chips.push([`${Math.round(pair.currentRoundTripTime * 1000)} ms`]);
     }
+    const media = dir === 'in' ? $('remote').srcObject : localStream;
+    if (media && !media.getAudioTracks().length) chips.push(['no sound', true]);
     if (dir === 'out' && rtp.qualityLimitationReason && rtp.qualityLimitationReason !== 'none') {
       chips.push([`limited by ${rtp.qualityLimitationReason}`, true]);
     }
@@ -404,10 +458,58 @@ $('copyLink').addEventListener('click', async () => {
   setTimeout(() => $('copyLink').textContent = 'Copy invite link', 2000);
 });
 
-$('unmute').addEventListener('click', () => { const v = $('remote'); v.muted = false; v.play(); $('unmute').classList.remove('show'); });
-$('fullscreen').addEventListener('click', () => {
+/* ---------- Volume, mute, pop-out ---------- */
+let userMuted = false;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+function syncMuteUi() {
+  const m = $('remote').muted;
+  $('muteBtn').textContent = m ? 'Unmute' : 'Mute';
+  $('muteBtn').setAttribute('aria-pressed', String(m));
+}
+
+function setMuted(m) {
+  userMuted = m;
   const v = $('remote');
-  if (document.fullscreenElement) document.exitFullscreen(); else v.requestFullscreen();
+  v.muted = m;
+  if (!m) { v.play().catch(() => {}); $('unmute').classList.remove('show'); }
+  syncMuteUi();
+}
+
+function setVolume(pct) {
+  $('remote').volume = pct / 100;
+  $('volume').value = pct;
+  $('volPct').textContent = pct + '%';
+  store.set('screenroom-volume', pct);
+}
+
+const savedVol = Number(store.get('screenroom-volume'));
+setVolume(store.get('screenroom-volume') !== null && savedVol >= 0 && savedVol <= 100 ? savedVol : 100);
+
+$('volume').addEventListener('input', () => {
+  const pct = Number($('volume').value);
+  setVolume(pct);
+  if (pct > 0 && $('remote').muted) setMuted(false);  // dragging the slider up means "I want to hear it"
+});
+$('muteBtn').addEventListener('click', () => setMuted(!$('remote').muted));
+$('unmute').addEventListener('click', () => setMuted(false));
+
+if (!document.pictureInPictureEnabled) $('pip').hidden = true;
+$('pip').addEventListener('click', async () => {
+  try {
+    if (document.pictureInPictureElement) await document.exitPictureInPicture();
+    else await $('remote').requestPictureInPicture();
+  } catch (e) { console.warn('Picture-in-picture failed', e); }
+});
+$('remote').addEventListener('enterpictureinpicture', () => $('pip').textContent = 'Pop back in');
+$('remote').addEventListener('leavepictureinpicture', () => $('pip').textContent = 'Pop out');
+
+// Fullscreen the whole stage so the volume controls stay available
+$('fullscreen').addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen(); else document.querySelector('.stage').requestFullscreen();
 });
 
 $('quality').addEventListener('change', () => {

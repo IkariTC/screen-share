@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #1b2130;
+    --surface: #252c3c;
+    --line: #37415a;
+    --text: #e6e9f2;
+    --muted: #9aa3b8;
+    --accent: #7da2ff;
+    --live: #ff6b6b;
+    --good: #6fd6a4;
+    --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--ink); color: var(--text); font: 15px/1.5 var(--body);
+    display: grid; grid-template-rows: auto auto 1fr auto; min-height: 100%;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .9rem 1.25rem; border-bottom: 1px solid var(--line);
+  }
+  .brand { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
+  #status { color: var(--muted); font-size: .9rem; text-align: right; }
+  #status.good { color: var(--good); }
+  #status.bad { color: var(--live); }
+
+  /* Pairing panel */
+  .pair {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .pair > div { background: var(--ink); padding: 1.5rem 1.25rem; }
+  .pair h2 { font: 500 .95rem var(--body); color: var(--muted); margin: 0 0 .5rem; }
+  #myCode {
+    font-family: var(--display); font-weight: 700; font-size: clamp(2.6rem, 7vw, 4.5rem);
+    letter-spacing: .12em; line-height: 1; margin: 0 0 .9rem; user-select: all;
+    font-variant-numeric: tabular-nums;
+  }
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  #friendCode {
+    font-family: var(--display); font-weight: 700; font-size: 1.6rem; letter-spacing: .12em;
+    text-transform: uppercase; width: 9ch; padding: .35rem .6rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
+    padding: .55rem 1rem; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #111827; font-weight: 600; }
+  .btn.stop { background: var(--live); border-color: var(--live); color: #111827; font-weight: 600; }
+  .hint { color: var(--muted); font-size: .85rem; margin: .75rem 0 0; }
+  body.paired .pair { display: none; }
+
+  /* Stage */
+  .stage { position: relative; background: #000; min-height: 50vh; display: grid; place-items: center; }
+  #remote { width: 100%; height: 100%; max-height: calc(100vh - 9rem); object-fit: contain; display: none; }
+  body.watching #remote { display: block; }
+  .empty { color: var(--muted); text-align: center; padding: 2rem; max-width: 40ch; }
+  body.watching .empty { display: none; }
+  .stage-tools {
+    position: absolute; top: .75rem; right: .75rem; display: none; gap: .5rem;
+  }
+  body.watching .stage-tools { display: flex; }
+  .stage-tools .btn { background: rgba(27,33,48,.85); }
+  #unmute { display: none; }
+  #unmute.show { display: inline-block; }
+  #statsIn { position: absolute; left: .75rem; bottom: .75rem; display: none; }
+  body.watching #statsIn { display: flex; }
+
+  .stats { gap: .35rem; flex-wrap: wrap; font-size: .8rem; }
+  .stats span { background: rgba(37,44,60,.9); border: 1px solid var(--line); border-radius: 4px; padding: .1rem .45rem; }
+  .stats span.warn { color: var(--live); border-color: var(--live); }
+
+  /* Controls */
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem;
+    padding: .9rem 1.25rem; border-top: 1px solid var(--line);
+  }
+  .controls label { display: flex; flex-direction: column; font-size: .78rem; color: var(--muted); gap: .2rem; }
+  .controls select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
+  #stopBtn { display: none; }
+  body.sharing #stopBtn { display: inline-block; }
+  body.sharing #shareBtn { display: none; }
+  .mine { margin-left: auto; display: none; align-items: center; gap: .75rem; }
+  body.sharing .mine { display: flex; }
+  #localPreview { width: 160px; aspect-ratio: 16/9; background: #000; border: 2px solid var(--live); border-radius: 4px; }
+  #statsOut { display: flex; max-width: 22rem; }
+
+  @media (max-width: 700px) {
+    .pair { grid-template-columns: 1fr; }
+    .mine { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">Screen Room</div>
+    <div id="status" role="status">Starting up…</div>
+  </header>
+
+  <section class="pair">
+    <div>
+      <h2>Your code</h2>
+      <p id="myCode">······</p>
+      <div class="row">
+        <button class="btn" id="copyLink">Copy invite link</button>
+      </div>
+      <p class="hint">Send the link or code to your friend. Keep this tab open.</p>
+    </div>
+    <div>
+      <h2>Got a code from your friend?</h2>
+      <form class="row" id="joinForm">
+        <input id="friendCode" maxlength="6" autocomplete="off" spellcheck="false" aria-label="Friend's code" placeholder="ABC123">
+        <button class="btn primary" type="submit">Connect</button>
+      </form>
+      <p class="hint">Only one of you needs to connect.</p>
+    </div>
+  </section>
+
+  <main class="stage">
+    <p class="empty">Connect with your friend, then either of you can press “Share my screen”. Their screen shows up here.</p>
+    <video id="remote" autoplay playsinline></video>
+    <div class="stage-tools">
+      <button class="btn" id="unmute">Turn on sound</button>
+      <button class="btn" id="fullscreen">Fullscreen</button>
+    </div>
+    <div class="stats row" id="statsIn"></div>
+  </main>
+
+  <footer class="controls">
+    <button class="btn primary" id="shareBtn">Share my screen</button>
+    <button class="btn stop" id="stopBtn">Stop sharing</button>
+    <label>Quality
+      <select id="quality">
+        <option value="720p30">720p · 30 fps</option>
+        <option value="1080p30">1080p · 30 fps</option>
+        <option value="1080p60" selected>1080p · 60 fps</option>
+        <option value="1440p60">1440p · 60 fps</option>
+      </select>
+    </label>
+    <label>Optimise for
+      <select id="mode">
+        <option value="motion">Games &amp; video (smooth)</option>
+        <option value="detail">Text &amp; code (sharp)</option>
+      </select>
+    </label>
+    <label>Codec
+      <select id="codec">
+        <option value="auto">Auto</option>
+        <option value="H264">H.264 (usually GPU)</option>
+        <option value="VP9">VP9</option>
+        <option value="AV1">AV1</option>
+      </select>
+    </label>
+    <div class="mine">
+      <div class="stats row" id="statsOut"></div>
+      <video id="localPreview" autoplay muted playsinline></video>
+    </div>
+  </footer>
+
+<script>
+const PREFIX = 'screenroom-v1-';          // namespaces codes on the public PeerJS server
+const $ = id => document.getElementById(id);
+const QUALITY = {
+  '720p30':  { w: 1280, h: 720,  fps: 30, kbps: 3000 },
+  '1080p30': { w: 1920, h: 1080, fps: 30, kbps: 5000 },
+  '1080p60': { w: 1920, h: 1080, fps: 60, kbps: 9000 },
+  '1440p60': { w: 2560, h: 1440, fps: 60, kbps: 16000 },
+};
+
+let peer, conn, localStream, outCall, inCall, myCode;
+const statTimers = {};
+
+function setStatus(text, kind = '') { const s = $('status'); s.textContent = text; s.className = kind; }
+
+function randomCode() {
+  const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return [...crypto.getRandomValues(new Uint8Array(6))].map(b => a[b % a.length]).join('');
+}
+
+/* ---------- Signalling (PeerJS) ---------- */
+function startPeer() {
+  myCode = randomCode();
+  peer = new Peer(PREFIX + myCode, { debug: 1 });
+
+  peer.on('open', () => {
+    $('myCode').textContent = myCode;
+    setStatus('Waiting for your friend');
+    const join = new URLSearchParams(location.search).get('join');
+    if (join && !conn) connectTo(join);
+  });
+
+  peer.on('connection', c => attachConn(c));
+
+  peer.on('call', call => {
+    if (inCall) inCall.close();
+    inCall = call;
+    call.answer();                                  // we only receive on this call
+    call.on('stream', showRemote);
+    call.on('close', hideRemote);
+    watchStats(() => call.peerConnection, 'in');
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') { peer.destroy(); startPeer(); return; }
+    if (err.type === 'peer-unavailable') { setStatus('No one is using that code. Check it and try again.', 'bad'); return; }
+    if (err.type === 'browser-incompatible') { setStatus('This browser can’t do WebRTC. Use Chrome, Edge or Firefox.', 'bad'); return; }
+    setStatus('Connection problem (' + err.type + '). Reload to try again.', 'bad');
+  });
+
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+}
+
+function connectTo(code) {
+  code = code.trim().toUpperCase();
+  if (!code || code === myCode) return;
+  setStatus('Connecting to ' + code + '…');
+  attachConn(peer.connect(PREFIX + code, { reliable: true }));
+}
+
+function attachConn(c) {
+  if (conn && conn !== c) conn.close();
+  conn = c;
+  c.on('open', () => {
+    setStatus('Connected to ' + c.peer.slice(PREFIX.length), 'good');
+    document.body.classList.add('paired');
+    if (localStream) callFriend();
+  });
+  c.on('data', msg => { if (msg && msg.type === 'stopped') hideRemote(); });
+  c.on('close', () => {
+    if (conn !== c) return;
+    conn = null;
+    hideRemote();
+    document.body.classList.remove('paired');
+    setStatus('Your friend left. Share your code to reconnect.');
+  });
+}
+
+/* ---------- Sending your screen ---------- */
+async function startShare() {
+  const q = QUALITY[$('quality').value];
+  try {
+    localStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      systemAudio: 'include',
+      selfBrowserSurface: 'exclude',
+    });
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') setStatus('Couldn’t start sharing: ' + e.message, 'bad');
+    return;
+  }
+  const vt = localStream.getVideoTracks()[0];
+  vt.contentHint = $('mode').value;
+  vt.addEventListener('ended', stopShare);          // browser's own "Stop sharing" bar
+  $('localPreview').srcObject = localStream;
+  document.body.classList.add('sharing');
+  if (conn && conn.open) callFriend();
+  else setStatus('Sharing is ready. It starts as soon as your friend connects.');
+}
+
+function callFriend() {
+  if (outCall) outCall.close();
+  outCall = peer.call(conn.peer, localStream, { sdpTransform: preferCodec });
+  const pc = outCall.peerConnection;
+  pc.addEventListener('connectionstatechange', () => { if (pc.connectionState === 'connected') applyQuality(); });
+  watchStats(() => pc, 'out');
+}
+
+function stopShare() {
+  if (!localStream) return;
+  localStream.getTracks().forEach(t => t.stop());
+  localStream = null;
+  if (outCall) { outCall.close(); outCall = null; }
+  if (conn && conn.open) conn.send({ type: 'stopped' });
+  $('localPreview').srcObject = null;
+  document.body.classList.remove('sharing');
+  clearInterval(statTimers.out);
+}
+
+// Bitrate / fps caps and what to sacrifice when the connection struggles
+async function applyQuality() {
+  if (!outCall || !outCall.peerConnection) return;
+  const q = QUALITY[$('quality').value];
+  const pref = $('mode').value === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
+  for (const sender of outCall.peerConnection.getSenders()) {
+    if (!sender.track || sender.track.kind !== 'video') continue;
+    const p = sender.getParameters();
+    if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+    p.encodings[0].maxBitrate = q.kbps * 1000;
+    p.encodings[0].maxFramerate = q.fps;
+    p.degradationPreference = pref;
+    try { await sender.setParameters(p); }
+    catch (e) {
+      delete p.degradationPreference;               // not every browser accepts this
+      try { await sender.setParameters(p); } catch (e2) { console.warn('setParameters failed', e2); }
+    }
+  }
+}
+
+// Move the chosen codec to the front of the offer so the other side picks it
+function preferCodec(sdp) {
+  const codec = $('codec').value;
+  if (codec === 'auto') return sdp;
+  const lines = sdp.split('\r\n');
+  const m = lines.findIndex(l => l.startsWith('m=video'));
+  if (m < 0) return sdp;
+  const pts = lines
+    .filter(l => l.startsWith('a=rtpmap:') && l.toUpperCase().includes(' ' + codec + '/'))
+    .map(l => l.slice(9).split(' ')[0]);
+  if (!pts.length) return sdp;                       // codec not supported here; leave as is
+  const parts = lines[m].split(' ');
+  const rest = parts.slice(3);
+  lines[m] = [...parts.slice(0, 3), ...pts.filter(p => rest.includes(p)), ...rest.filter(p => !pts.includes(p))].join(' ');
+  return lines.join('\r\n');
+}
+
+/* ---------- Receiving ---------- */
+async function showRemote(stream) {
+  const v = $('remote');
+  v.srcObject = stream;
+  document.body.classList.add('watching');
+  v.muted = false;
+  try { await v.play(); $('unmute').classList.remove('show'); }
+  catch (e) {                                       // autoplay with sound blocked
+    v.muted = true;
+    try { await v.play(); } catch (e2) {}
+    $('unmute').classList.add('show');
+  }
+}
+
+function hideRemote() {
+  $('remote').srcObject = null;
+  document.body.classList.remove('watching');
+  clearInterval(statTimers.in);
+}
+
+/* ---------- Live stats ---------- */
+function watchStats(getPc, dir) {
+  clearInterval(statTimers[dir]);
+  let last = null;
+  const box = $(dir === 'in' ? 'statsIn' : 'statsOut');
+  statTimers[dir] = setInterval(async () => {
+    const pc = getPc();
+    if (!pc) return;
+    if (pc.connectionState === 'closed') { clearInterval(statTimers[dir]); return; }
+    const stats = await pc.getStats();
+    let rtp, pair;
+    stats.forEach(s => {
+      if (s.type === (dir === 'in' ? 'inbound-rtp' : 'outbound-rtp') && s.kind === 'video') rtp = s;
+      if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') pair = s;
+    });
+    if (!rtp) return;
+    const bytes = dir === 'in' ? rtp.bytesReceived : rtp.bytesSent;
+    const mbps = last ? (bytes - last.bytes) * 8 / ((rtp.timestamp - last.t) / 1000) / 1e6 : 0;
+    last = { bytes, t: rtp.timestamp };
+
+    const chips = [];
+    if (rtp.frameWidth) chips.push([`${rtp.frameWidth}×${rtp.frameHeight}`]);
+    if (rtp.framesPerSecond != null) chips.push([`${Math.round(rtp.framesPerSecond)} fps`]);
+    chips.push([`${mbps.toFixed(1)} Mbps`]);
+    const codec = rtp.codecId && stats.get(rtp.codecId);
+    if (codec) chips.push([codec.mimeType.replace('video/', '')]);
+    if (pair) {
+      const lc = stats.get(pair.localCandidateId);
+      if (lc) chips.push([lc.candidateType === 'relay' ? 'relayed' : 'direct', lc.candidateType === 'relay']);
+      if (pair.currentRoundTripTime != null) chips.push([`${Math.round(pair.currentRoundTripTime * 1000)} ms`]);
+    }
+    if (dir === 'out' && rtp.qualityLimitationReason && rtp.qualityLimitationReason !== 'none') {
+      chips.push([`limited by ${rtp.qualityLimitationReason}`, true]);
+    }
+    box.replaceChildren(...chips.map(([t, warn]) => {
+      const s = document.createElement('span'); s.textContent = t; if (warn) s.className = 'warn'; return s;
+    }));
+  }, 1000);
+}
+
+/* ---------- UI wiring ---------- */
+$('joinForm').addEventListener('submit', e => { e.preventDefault(); connectTo($('friendCode').value); });
+$('shareBtn').addEventListener('click', startShare);
+$('stopBtn').addEventListener('click', stopShare);
+
+$('copyLink').addEventListener('click', async () => {
+  const link = location.origin + location.pathname + '?join=' + myCode;
+  try { await navigator.clipboard.writeText(link); $('copyLink').textContent = 'Link copied'; }
+  catch (e) { prompt('Copy this link:', link); }
+  setTimeout(() => $('copyLink').textContent = 'Copy invite link', 2000);
+});
+
+$('unmute').addEventListener('click', () => { const v = $('remote'); v.muted = false; v.play(); $('unmute').classList.remove('show'); });
+$('fullscreen').addEventListener('click', () => {
+  const v = $('remote');
+  if (document.fullscreenElement) document.exitFullscreen(); else v.requestFullscreen();
+});
+
+$('quality').addEventListener('change', () => {
+  if (!localStream) return;
+  const q = QUALITY[$('quality').value];
+  localStream.getVideoTracks()[0].applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } });
+  applyQuality();
+});
+$('mode').addEventListener('change', () => {
+  if (localStream) localStream.getVideoTracks()[0].contentHint = $('mode').value;
+  applyQuality();
+});
+$('codec').addEventListener('change', () => { if (localStream && conn && conn.open) callFriend(); });
+
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+  $('shareBtn').disabled = true;
+  $('shareBtn').title = 'Screen sharing needs a desktop browser over https';
+}
+
+startPeer();
+</script>
+</body>
+</html>

@@ -419,7 +419,6 @@
             <div class="stack">
               <p class="eyebrow">Your room is open</p>
               <h1>Send a friend the link.</h1>
-              <p class="lede">They click it, pick a name and land right here. Keep this tab open while they join.</p>
             </div>
             <div class="linkrow">
               <div class="linkbox" id="inviteLink">getting your link…</div>
@@ -833,7 +832,8 @@ function updateDock() {
   const others = joinedMembers();
   $('selfSub').textContent = others.length
     ? nameList(others.map(m => m.name)) + ' can see it. Anything they share will take over this space.'
-    : 'Nobody else is here yet. Copy the invite link up top to bring a friend in.';
+    : '';
+  $('selfSub').hidden = !others.length;
   $('dockHint').textContent = !canShare ? 'Sharing a screen needs a desktop browser.'
     : others.length ? 'Anyone can share at the same time.'
     : 'You can start sharing before anyone arrives.';

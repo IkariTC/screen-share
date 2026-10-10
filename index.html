@@ -3,292 +3,530 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#171311">
 <title>Screen Room</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171311'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23e2a55a'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root {
     color-scheme: dark;
-    --ink: #1b2130;
-    --surface: #252c3c;
-    --line: #37415a;
-    --text: #e6e9f2;
-    --muted: #9aa3b8;
-    --accent: #7da2ff;
-    --live: #ff6b6b;
-    --good: #6fd6a4;
-    --glass: rgba(27,33,48,.85);
-    --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-    --body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ground: #171311;
+    --stage: #0c0a09;
+    --surface: #201b18;
+    --raised: #2a2420;
+    --line: #3a322c;
+    --line-strong: #4a4038;
+    --text: #ece4d8;
+    --muted: #a89c8d;
+    --amber: #e2a55a;
+    --amber-ink: #1a130b;
+    --amber-tint: rgba(226,165,90,.12);
+    --rust: #e58a6b;
+    --sage: #9fba9c;
+    --glass: rgba(32,27,24,.92);
+    --sans: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--ink); color: var(--text); font: 15px/1.5 var(--body);
-    display: grid; grid-template-rows: auto auto 1fr auto; height: 100%;
+    background: radial-gradient(900px 600px at 84% -10%, rgba(226,165,90,.15), rgba(226,165,90,0) 70%) no-repeat fixed, var(--ground);
+    color: var(--text); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased;
   }
-  body.paired { grid-template-rows: auto 1fr auto; }
-  button, select, input { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Soft film grain over everything except the video stage */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: .07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .5; }
+  h1, h2, h3, p { margin: 0; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   [hidden] { display: none !important; }
 
-  header {
-    display: flex; align-items: center; gap: .5rem 1.25rem; flex-wrap: wrap;
-    padding: .7rem 1.25rem; border-bottom: 1px solid var(--line);
-  }
-  .brand { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
-  #status { color: var(--muted); font-size: .9rem; margin-left: auto; }
-  #status.good { color: var(--good); }
-  #status.bad { color: var(--live); }
-  .namefield { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
-  .namefield input {
-    width: 11rem; padding: .3rem .55rem; background: var(--surface);
-    border: 1px solid var(--line); border-radius: 6px;
-  }
+  .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* Lobby (hidden once you're in a room with someone) */
-  .pair {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
-    border-bottom: 1px solid var(--line);
-  }
-  .pair > div { background: var(--ink); padding: 1.25rem; }
-  .pair h2 { font: 500 .95rem var(--body); color: var(--muted); margin: 0 0 .5rem; }
-  #myCode {
-    font-family: var(--display); font-weight: 700; font-size: clamp(2.4rem, 6vw, 4rem);
-    letter-spacing: .12em; line-height: 1; margin: 0 0 .9rem; user-select: all;
-    font-variant-numeric: tabular-nums;
-  }
-  .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-  #friendCode {
-    font-family: var(--display); font-weight: 700; font-size: 1.6rem; letter-spacing: .12em;
-    text-transform: uppercase; width: 9ch; padding: .35rem .6rem;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
-  }
+  /* Buttons */
   .btn {
-    border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
-    padding: .55rem 1rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); font-size: 14px; font-weight: 500; white-space: nowrap;
+    transition: border-color .15s, background .15s, color .15s;
   }
-  .btn:hover { border-color: var(--muted); }
-  .btn.small { padding: .3rem .7rem; font-size: .85rem; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #111827; font-weight: 600; }
-  .btn.stop { background: var(--live); border-color: var(--live); color: #111827; font-weight: 600; }
-  .hint { color: var(--muted); font-size: .85rem; margin: .75rem 0 0; }
-  body.paired .pair { display: none; }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 700; }
+  .btn.primary:hover:not(:disabled) { background: #ecb672; border-color: #ecb672; }
+  .btn.big { height: 52px; padding: 0 22px; border-radius: 14px; font-size: 16px; }
+  .btn.tint { height: 48px; padding: 0 20px; border-color: var(--amber); background: var(--amber-tint); color: var(--amber); font-size: 15px; font-weight: 600; }
+  .btn.tint:hover:not(:disabled) { border-color: var(--amber); background: rgba(226,165,90,.2); }
+  .btn.stop { height: 48px; padding: 0 20px; border-color: var(--rust); background: rgba(229,138,107,.1); color: var(--rust); font-size: 15px; font-weight: 600; }
+  .btn.stop:hover { border-color: var(--rust); background: rgba(229,138,107,.2); }
+  .btn.icon { width: 44px; padding: 0; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.ghost:hover:not(:disabled) { border-color: transparent; background: rgba(236,228,216,.07); color: var(--text); }
+  .btn.glass { border-color: rgba(236,228,216,.14); background: var(--glass); }
+  .btn.glass[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--amber); text-decoration: underline; text-underline-offset: 3px; }
+  .linkbtn:hover { color: #f0bd7c; }
 
-  /* Room: streams on the left, people + chat on the right */
-  .room { display: grid; grid-template-columns: 1fr 20rem; min-height: 0; }
-  .stage { position: relative; background: #000; min-height: 0; overflow: hidden; }
-  .empty {
-    position: absolute; inset: 0; margin: auto; height: fit-content;
-    color: var(--muted); text-align: center; padding: 2rem; max-width: 40ch;
+  /* Shared bits */
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .lamp { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 0 5px rgba(226,165,90,.16), 0 0 24px 4px rgba(226,165,90,.35); }
+  .eyebrow { font: 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
+  .eyebrow.quiet { color: var(--muted); }
+  .eyebrow.live { display: flex; align-items: center; gap: 10px; }
+  .livedot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 10px 2px rgba(226,165,90,.45); }
+  h1 { font-size: 48px; line-height: 1.04; font-weight: 600; letter-spacing: -.025em; text-wrap: balance; }
+  .lede { font-size: 17px; color: var(--muted); text-wrap: pretty; }
+  .hint { font-size: 14px; color: var(--muted); }
+  .hint.small { font-size: 13px; }
+  .code { font: 500 20px var(--mono); letter-spacing: .18em; color: var(--text); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---------- Start / invited ---------- */
+  .entry { position: relative; min-height: 100%; display: flex; flex-direction: column; }
+  body.in-room .entry { display: none; }
+  .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 24px 40px; }
+  .statusline { display: flex; align-items: center; gap: 8px; font: 13px var(--mono); color: var(--muted); }
+  .statusline::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted); }
+  .statusline.good::before { background: var(--sage); }
+  .statusline.bad { color: var(--rust); }
+  .statusline.bad::before { background: var(--rust); }
+  .entry-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 24px 96px; }
+  .entry-col { width: 100%; max-width: 448px; display: flex; flex-direction: column; gap: 28px; }
+  .intro { display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    display: flex; flex-direction: column; gap: 20px; padding: 24px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 60px -24px rgba(0,0,0,.6);
   }
-  body.watching .empty { display: none; }
-  .stage-tools { position: absolute; top: .75rem; left: .75rem; display: flex; gap: .5rem; z-index: 2; }
-  .stage-tools .btn { background: var(--glass); }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .field label, .stack > label { font-size: 14px; color: var(--muted); }
+  .input {
+    width: 100%; height: 48px; padding: 0 14px; border-radius: 12px;
+    border: 1px solid var(--line-strong); background: var(--ground); font-size: 16px;
+  }
+  .input::placeholder, .chat-form input::placeholder { color: #8f8476; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--ground); border: 1px solid var(--line); }
+  .seg button { height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 600; }
+  .seg button:hover { color: var(--text); }
+  .seg button[aria-pressed="true"] { background: #352c25; color: var(--text); }
+  .card .btn.big { width: 100%; }
+  .joinrow { display: flex; flex-wrap: wrap; gap: 10px; }
+  .joinrow .btn.big { width: auto; flex: 0 0 auto; }
+  body.invited .joinrow .btn.big { flex: 1; }
+  #friendCode {
+    flex: 1 1 160px; min-width: 0; width: auto; height: 52px; padding: 0 16px; border-radius: 14px;
+    font: 500 22px var(--mono); letter-spacing: .18em; text-transform: uppercase;
+  }
+  .coderow {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px;
+    border-radius: 12px; background: var(--ground); border: 1px solid var(--line); font-size: 14px; color: var(--muted);
+  }
+  .entry-msg { font-size: 14px; color: var(--muted); }
+  .entry-msg.bad { color: var(--rust); }
+  .foot { font-size: 14px; color: var(--muted); }
+  .foot.mono { font: 13px var(--mono); }
+  body:not(.invited) .invited-only { display: none !important; }
+  body.invited .fresh-only { display: none !important; }
 
-  .streams { position: absolute; inset: 0; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .5rem; }
-  .streams.spotlight { padding: .5rem; }
-  .streams.solo { padding: 0; }
-  .tile { position: relative; background: #000; border-radius: 6px; overflow: hidden; }
+  /* ---------- Room ---------- */
+  .app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+  body:not(.in-room) .app { display: none; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 24px; }
+  .roomstatus { font-size: 15px; color: var(--muted); }
+  .roomstatus.bad { color: var(--rust); }
+  .bar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .namechip {
+    display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px 0 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface); cursor: text; transition: border-color .15s;
+  }
+  .namechip:hover { border-color: var(--muted); }
+  .namechip:focus-within { border-color: var(--amber); }
+  .namechip input { width: 7ch; min-width: 4ch; max-width: 24ch; padding: 0; border: 0; outline: 0; background: none; font-size: 14px; font-weight: 500; }
+  .namechip input::placeholder { color: var(--muted); }
+  .namechip .ic { width: 15px; height: 15px; color: var(--muted); }
+
+  .room { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; padding: 6px 20px 20px; }
+  .stagecol { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+  .stage {
+    position: relative; z-index: 2; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden;
+    background: var(--stage); border: 1px solid rgba(236,228,216,.07);
+  }
+
+  /* What the stage shows when no one's screen is on it */
+  .pane { position: absolute; inset: 0; display: none; padding: 40px 24px; overflow: auto; }
+  .pane-col { width: 100%; max-width: 520px; margin: auto; display: flex; flex-direction: column; gap: 28px; }
+  .pane h1 { font-size: 40px; line-height: 1.06; }
+  body:not(.paired):not(.watching):not(.sharing) .pane-invite,
+  body.paired:not(.watching):not(.sharing) .pane-quiet,
+  body.sharing:not(.watching) .pane-self { display: flex; }
+  .linkrow { display: flex; flex-wrap: wrap; gap: 10px; }
+  .linkbox {
+    flex: 1 1 240px; min-width: 0; height: 52px; padding: 0 16px; border-radius: 14px;
+    border: 1px solid var(--line-strong); background: var(--ground); font: 14px/50px var(--mono); color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all;
+  }
+  .codeline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; font-size: 15px; color: var(--muted); }
+  #myCode { font-size: 28px; letter-spacing: .2em; user-select: all; font-variant-numeric: tabular-nums; }
+  .pane-self { padding: 40px clamp(24px, 4vw, 56px); }
+  .pane-self .pane-col { max-width: 460px; margin: auto 0; }
+  .pane-self h1 { font-size: 34px; line-height: 1.08; letter-spacing: -.02em; }
+  #localPreview {
+    width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; border: 1px solid var(--amber); background: #100d0c; object-fit: contain;
+    box-shadow: 0 0 0 6px rgba(226,165,90,.1), 0 0 70px rgba(226,165,90,.16);
+  }
+
+  /* Streams */
+  .streams { position: absolute; inset: 0; display: none; }
+  body.watching .streams { display: flex; }
+  .streams.spotlight { flex-direction: column; align-items: flex-end; gap: 8px; padding: 16px; overflow: hidden; }
+  .tile { position: relative; background: #000; border-radius: 12px; overflow: hidden; container-type: size; }
   .tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
   .tile:fullscreen { border-radius: 0; }
-  .streams.spotlight .tile { flex: 0 0 13rem; height: 7.5rem; cursor: pointer; outline: 1px solid var(--line); }
-  .streams.spotlight .tile:hover { outline-color: var(--accent); }
-  .streams.spotlight .tile.spot { order: -1; flex: 1 0 100%; height: calc(100% - 8rem); cursor: default; outline: 0; }
-  .streams.solo .tile.spot { height: 100%; border-radius: 0; }
-  .streams.grid {
-    display: grid; padding: 3.5rem .5rem .5rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); grid-auto-rows: 1fr;
-  }
-  .tile { container-type: size; }
-  @container (max-width: 34rem) {
-    .tile-top { left: .5rem; top: .5rem; right: .5rem; gap: .35rem; }
-    .tile-top .btn { padding: .3rem .6rem; font-size: .85rem; }
-    .tile-top .vol .btn { min-width: 4.8em; }
-    .tile-top .vol input { width: 4.5rem; }
-    .tile-top .vol .pct { display: none; }
-  }
-  @container (max-height: 16rem) { .tile-bottom .stats { display: none; } }
-  .streams.spotlight .tile:not(.spot) .tile-top,
-  .streams.spotlight .tile:not(.spot) .stats { display: none; }
+  .tile:fullscreen:not(.awake) { cursor: none; }
+  .streams.spotlight .tile { flex: 0 0 104px; width: 184px; z-index: 2; cursor: pointer; border: 1px solid var(--line-strong); }
+  .streams.spotlight .tile:hover { border-color: var(--amber); }
+  .streams.spotlight .tile.spot { position: absolute; inset: 0; width: auto; z-index: 1; cursor: default; border: 0; border-radius: 0; }
+  body.watching .streams.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); grid-auto-rows: 1fr; gap: 8px; padding: 8px; }
 
-  .tile-top {
-    position: absolute; top: .75rem; right: .75rem; left: 9rem; display: flex; gap: .5rem;
-    flex-wrap: wrap; justify-content: flex-end; align-items: center;
-  }
-  .tile-top .btn { background: var(--glass); }
-  .tile-bottom {
-    position: absolute; left: .5rem; right: .5rem; bottom: .5rem;
-    display: flex; gap: .35rem; flex-wrap: wrap; align-items: center;
-  }
-  .who { background: var(--glass); border-radius: 4px; padding: .1rem .5rem; font-weight: 600; font-size: .85rem; }
+  .tile-tag { position: absolute; top: 16px; left: 16px; z-index: 1; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .who { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(23,19,17,.85); font-size: 14px; white-space: nowrap; }
+  .chip { font: 12.5px var(--mono); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(23,19,17,.85); color: var(--muted); }
+  .chip.warn { color: var(--rust); border-color: var(--rust); }
+  .stats { position: absolute; top: 58px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+  .stats span { font: 12.5px var(--mono); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(23,19,17,.85); color: var(--text); }
+  .stats span.warn { color: var(--rust); border-color: var(--rust); }
+  .streams.grid .who .tail { display: none; }
+  .streams.spotlight .tile:not(.spot) .tile-tag { top: auto; bottom: 8px; left: 8px; }
+  .streams.spotlight .tile:not(.spot) .who { height: 24px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+  .streams.spotlight .tile:not(.spot) :is(.livedot, .tail, .chip, .stats, .tile-ui) { display: none; }
 
-  .vol {
-    display: flex; align-items: center; gap: .5rem; padding-right: .6rem;
-    background: var(--glass); border: 1px solid var(--line); border-radius: 6px;
+  /* Controls on a stream: tucked away until the pointer moves over it */
+  .tile-ui {
+    position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    padding: 64px 16px 16px; background: linear-gradient(to top, rgba(12,10,9,.94), rgba(12,10,9,0));
+    opacity: 0; pointer-events: none; transition: opacity .2s;
   }
-  .vol .btn { background: none; border: 0; min-width: 5.5em; }
-  .vol input { width: 7rem; accent-color: var(--accent); }
-  .vol .pct { font-size: .8rem; color: var(--muted); min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
-
-  .stats { gap: .35rem; flex-wrap: wrap; font-size: .8rem; }
-  .stats span { background: rgba(37,44,60,.9); border: 1px solid var(--line); border-radius: 4px; padding: .1rem .45rem; }
-  .stats span.warn, .chip.warn { color: var(--live); border-color: var(--live); }
-  .stats span.name { background: none; border: 0; padding-left: 0; color: var(--text); font-weight: 600; }
-  .chip { font-size: .8rem; background: rgba(37,44,60,.9); border: 1px solid var(--line); border-radius: 4px; padding: .1rem .45rem; }
-
-  .side { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
-  .side h2 { font: 600 .8rem var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; }
-  .side-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .8rem 1rem .5rem; }
-  .people { list-style: none; margin: 0; padding: 0 1rem .75rem; max-height: 45%; overflow-y: auto; border-bottom: 1px solid var(--line); }
-  .person { padding: .4rem 0; }
-  .phead { display: flex; align-items: center; gap: .5rem; }
-  .dot { width: .6rem; height: .6rem; border-radius: 50%; flex: none; }
-  .pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pstate { margin-left: auto; font-size: .8rem; color: var(--muted); }
-  .pstate.live { color: var(--live); }
-  .person .vol { background: none; border: 0; padding: 0; margin-top: .2rem; }
-  .person .vol .btn { padding: .2rem .4rem; min-width: 4.8em; font-size: .85rem; border: 1px solid var(--line); background: var(--surface); }
-  .person .vol input { flex: 1; width: auto; }
-
-  .chat-title { padding: .8rem 1rem .25rem; }
-  .chat-log { list-style: none; margin: 0; padding: .25rem 1rem; flex: 1; min-height: 6rem; overflow-y: auto; }
-  .msg { padding: .2rem 0; overflow-wrap: anywhere; }
-  .msg .from { font-weight: 600; margin-right: .4rem; }
-  .msg.sys { color: var(--muted); font-size: .85rem; font-style: italic; }
-  .chat-form { display: flex; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--line); }
-  .chat-form input {
-    flex: 1; min-width: 0; padding: .45rem .6rem; background: var(--surface);
-    border: 1px solid var(--line); border-radius: 6px;
+  .tile.awake .tile-ui { opacity: 1; pointer-events: auto; }
+  .tile-ui:has(:focus-visible) { opacity: 1; pointer-events: auto; }
+  @media (hover: none) { .tile-ui { opacity: 1; pointer-events: auto; } }
+  .tile-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+  .vol { display: flex; align-items: center; gap: 10px; }
+  .tile-ui .vol { height: 44px; padding: 0 14px 0 2px; border-radius: 12px; border: 1px solid rgba(236,228,216,.14); background: var(--glass); }
+  .vol input { width: 120px; accent-color: var(--amber); }
+  .vol .pct { min-width: 4ch; font: 13px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .volbtn { width: 40px; height: 40px; padding: 0; border-radius: 10px; color: var(--text); }
+  .volbtn .ic + .ic, .volbtn.off .ic { display: none; }
+  .volbtn.off .ic + .ic { display: block; color: var(--rust); }
+  @container (max-width: 44rem) {
+    .tile-ui .lbl { display: none; }
+    .tile-ui .btn.glass { width: 44px; padding: 0; }
+    .tile-ui .vol input { width: 84px; }
   }
-
-  /* Your own sharing controls */
-  .controls {
-    display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem;
-    padding: .9rem 1.25rem; border-top: 1px solid var(--line);
+  @container (max-width: 26rem) {
+    .tile-ui { padding: 40px 8px 8px; gap: 6px; }
+    .tile-ui .vol .pct { display: none; }
+    .tile-actions { gap: 6px; }
+    .tile-tag { top: 8px; left: 8px; }
+    .stats { top: 46px; left: 8px; right: 8px; }
   }
-  .controls label { display: flex; flex-direction: column; font-size: .78rem; color: var(--muted); gap: .2rem; }
-  .controls select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
+  @container (max-height: 15rem) { .stats { display: none; } }
+  #unmute { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 3; border-color: var(--amber); color: var(--amber); }
+
+  /* Your own controls */
+  .dock {
+    position: relative; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
+  }
   #stopBtn { display: none; }
-  body.sharing #stopBtn { display: inline-block; }
+  body.sharing #stopBtn { display: inline-flex; }
   body.sharing #shareBtn { display: none; }
-  .mine { margin-left: auto; display: none; align-items: center; gap: .75rem; }
-  body.sharing .mine { display: flex; }
-  #localPreview { width: 160px; aspect-ratio: 16/9; background: #000; border: 2px solid var(--live); border-radius: 4px; }
-  .mine-info { display: flex; flex-direction: column; gap: .4rem; max-width: 26rem; }
-  #statsOut { display: flex; flex-direction: column; gap: .3rem; }
-  #audioNote { margin: 0; font-size: .8rem; color: var(--muted); }
-  #audioNote.warn { color: var(--live); }
+  .dock-note { flex: 1 1 200px; font-size: 14px; color: var(--muted); }
+  #audioNote { display: none; }
+  body.sharing #audioNote { display: flex; align-items: baseline; gap: 8px; }
+  body.sharing #dockHint { display: none; }
+  #audioNote::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--sage); transform: translateY(-1px); }
+  #audioNote.warn { color: var(--rust); }
+  #audioNote.warn::before { background: var(--rust); }
+  #miniPreview { display: none; height: 48px; aspect-ratio: 16 / 9; border-radius: 8px; border: 1px solid var(--amber); background: #000; object-fit: contain; }
+  body.sharing.watching #miniPreview { display: block; }
+
+  .settings { position: relative; }
+  #settingsBtn { position: relative; width: 48px; height: 48px; background: var(--raised); }
+  #settingsBtn .ic { width: 20px; height: 20px; }
+  #settingsBtn[aria-expanded="true"] { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); }
+  #settingsBtn.alert::after { content: ""; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--rust); }
+  .popover {
+    position: absolute; right: 0; bottom: calc(100% + 22px); width: min(380px, calc(100vw - 66px));
+    max-height: calc(100dvh - 150px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 20px;
+    border-radius: 18px; background: var(--raised); border: 1px solid var(--line-strong); box-shadow: 0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .pop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pop-head h2 { font-size: 17px; font-weight: 600; }
+  .pop-head .btn { width: 40px; height: 40px; margin-right: -8px; }
+  fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+  legend, .now h3, .side h2 { padding: 0; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  legend { margin-bottom: 8px; }
+  .optgrid { display: grid; gap: 8px; }
+  .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .opt { position: relative; display: block; font-size: 14px; }
+  .opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .opt .box {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px; padding: 8px 6px;
+    border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 500; line-height: 1.2; text-align: center;
+    transition: border-color .15s, background .15s;
+  }
+  .opt .box.two { align-items: flex-start; gap: 2px; min-height: 60px; padding: 8px 14px; text-align: left; }
+  .opt .box b { font-weight: inherit; }
+  .opt .box small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .opt:hover .box { border-color: var(--muted); }
+  .opt input:checked + .box { border-color: var(--amber); background: rgba(226,165,90,.14); font-weight: 600; }
+  .opt input:focus-visible + .box { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .popover hr { width: 100%; height: 1px; margin: 0; border: 0; background: var(--line-strong); }
+  .now { display: flex; flex-direction: column; gap: 10px; }
+  #statsOut { display: flex; flex-direction: column; gap: 10px; }
+  #statsOut:empty { display: none; }
+  .statrow { display: flex; flex-direction: column; gap: 2px; }
+  .statrow .name { font-size: 14px; font-weight: 600; }
+  .statline { font: 12.5px var(--mono); color: var(--muted); }
+  .statline span + span::before { content: " · "; color: var(--muted); }
+  .statline .warn { color: var(--rust); }
+
+  /* People + chat */
+  .side { min-height: 0; display: flex; flex-direction: column; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+  .people-wrap { display: flex; flex-direction: column; gap: 8px; max-height: 45%; padding: 18px 18px 12px; border-bottom: 1px solid var(--line); overflow-y: auto; }
+  .people { list-style: none; margin: 0; padding: 0; }
+  .phead { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+  .pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pyou { font-size: 14px; color: var(--muted); }
+  .pstate { margin-left: auto; font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .pstate.live { color: var(--amber); }
+  .rowvol { gap: 8px; padding-bottom: 6px; }
+  .rowvol .volbtn { width: 36px; height: 36px; margin-left: -9px; }
+  .rowvol input { flex: 1; width: auto; min-width: 0; }
+  .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .chat h2 { padding: 18px 18px 8px; }
+  .chat-log { flex: 1; min-height: 6rem; display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0 18px 14px; overflow-y: auto; }
+  .chat-log > :first-child { margin-top: auto; }
+  .msg { font-size: 15px; overflow-wrap: anywhere; }
+  .msg .from { margin-right: 8px; font-weight: 600; }
+  .msg.sys { font-size: 14px; font-style: italic; color: var(--muted); }
+  .chat-form { display: flex; gap: 8px; padding: 14px; border-top: 1px solid var(--line); }
+  .chat-form input { flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--ground); font-size: 15px; }
+  .chat-form .btn { flex: none; background: var(--raised); }
 
   @media (max-width: 900px) {
-    body { height: auto; min-height: 100%; }
-    .room { grid-template-columns: 1fr; }
-    .stage { height: max(16rem, 60vw); }
-    .side { border-left: 0; border-top: 1px solid var(--line); }
-    .chat-log { height: 40vh; flex: none; }
+    .app { height: auto; min-height: 100dvh; }
+    .room { grid-template-columns: minmax(0, 1fr); }
+    .stage { flex: none; min-height: max(20rem, 62vw); }
+    .pane { position: static; min-height: inherit; }
+    .people-wrap { max-height: none; }
+    .chat-log { flex: none; height: 40vh; }
+    .popover { position: fixed; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100dvh - 24px); }
   }
-  @media (max-width: 700px) {
-    .pair { grid-template-columns: 1fr; }
-    .mine { margin-left: 0; }
-    .tile-top { left: .75rem; }
-    #status { margin-left: 0; width: 100%; order: 3; }
-    .stage { height: calc(56.25vw + 5.5rem); }
-    .streams.spotlight .tile { flex-basis: 8rem; height: 4.5rem; }
-    .streams.spotlight .tile.spot { height: calc(100% - 5rem); }
-    .stage-tools { top: auto; left: auto; bottom: .5rem; right: .5rem; }
+  @media (max-width: 600px) {
+    h1 { font-size: 40px; }
+    .pane h1 { font-size: 32px; }
+    .top { padding: 20px 24px; }
+    .bar { padding: 12px 16px; }
+    .room { gap: 12px; padding: 4px 12px 12px; }
+    .entry-main { padding-bottom: 48px; }
   }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-  <header>
-    <div class="brand">Screen Room</div>
-    <div id="status" role="status">Starting up…</div>
-    <label class="namefield">Your name
-      <input id="nameInput" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest">
-    </label>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></symbol>
+    <symbol id="i-muted" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+    <symbol id="i-signal" viewBox="0 0 24 24"><path d="M5 18v-3M10 18v-7M15 18V8M20 18V5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  </defs>
+</svg>
+
+<!-- Start screen: open a room, join with a code, or arrive by invite link -->
+<section class="entry" id="entry">
+  <header class="top">
+    <div class="brand"><span class="lamp" aria-hidden="true"></span>screen room</div>
+    <p class="statusline" id="entryStatus" role="status">starting up…</p>
+  </header>
+  <main class="entry-main">
+    <div class="entry-col">
+      <div class="intro">
+        <p class="eyebrow invited-only">You're invited</p>
+        <h1 id="entryTitle">Watch a screen together.</h1>
+        <p class="lede" id="entryLede">Open a room, send the link, press share. No accounts and nothing to install.</p>
+      </div>
+      <form class="card" id="entryForm">
+        <div class="coderow invited-only"><span>Room code</span><span class="code" id="invitedCode"></span></div>
+        <div class="field">
+          <label for="entryName">Your name</label>
+          <input class="input" id="entryName" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest">
+        </div>
+        <div class="seg fresh-only">
+          <button type="button" id="tabStart" aria-pressed="true">Start a room</button>
+          <button type="button" id="tabJoin" aria-pressed="false">I have a code</button>
+        </div>
+        <div class="stack" id="paneStart">
+          <button class="btn primary big" type="submit" id="openBtn">Open my room</button>
+          <p class="hint">You'll get a link to send to friends once you're in.</p>
+        </div>
+        <div class="stack" id="paneJoin" hidden>
+          <label for="friendCode" class="fresh-only">Code from your friend</label>
+          <div class="joinrow">
+            <input class="input fresh-only" id="friendCode" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC123">
+            <button class="btn primary big" type="submit" id="joinBtn">Join room</button>
+          </div>
+          <p class="hint" id="joinHint">Anyone already in the room can read you theirs.</p>
+        </div>
+        <p class="entry-msg" id="entryMsg" role="status" hidden></p>
+      </form>
+      <p class="foot mono fresh-only">Sharing sound works best in Chrome or Edge on a computer.</p>
+      <p class="foot invited-only">Not what you wanted? <button type="button" class="linkbtn" id="ownRoomBtn">Start your own room</button></p>
+    </div>
+  </main>
+</section>
+
+<!-- The room -->
+<div class="app" id="app">
+  <header class="bar">
+    <div class="brand"><span class="lamp" aria-hidden="true"></span>screen room</div>
+    <p class="roomstatus" id="status" role="status">just you so far</p>
+    <div class="bar-actions">
+      <button class="btn copy-invite" type="button" data-label="Copy invite link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl">Copy invite link</span></button>
+      <label class="namechip" title="Change your name">
+        <span class="dot" id="meDot" aria-hidden="true"></span>
+        <input id="nameInput" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest" aria-label="Your name">
+        <svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg>
+      </label>
+      <button class="btn ghost" type="button" id="leaveBtn">Leave</button>
+    </div>
   </header>
 
-  <section class="pair">
-    <div>
-      <h2>Your code</h2>
-      <p id="myCode">······</p>
-      <div class="row">
-        <button class="btn copy-invite">Copy invite link</button>
-      </div>
-      <p class="hint">Send the link or code to your friends. Keep this tab open.</p>
-    </div>
-    <div>
-      <h2>Got a code from a friend?</h2>
-      <form class="row" id="joinForm">
-        <input id="friendCode" maxlength="6" autocomplete="off" spellcheck="false" aria-label="Friend's code" placeholder="ABC123">
-        <button class="btn primary" type="submit" id="joinBtn">Connect</button>
-      </form>
-      <p class="hint" id="joinHint">Anyone already in the room can give you their code.</p>
-    </div>
-  </section>
-
   <main class="room">
-    <section class="stage">
-      <p class="empty">When someone presses “Share my screen”, their screen shows up here.</p>
-      <div id="streams" class="streams spotlight"></div>
-      <div class="stage-tools">
-        <button class="btn" id="unmute" hidden>Turn on sound</button>
-        <button class="btn" id="layoutBtn" hidden>Grid view</button>
+    <section class="stagecol">
+      <div class="stage">
+        <div class="pane pane-invite">
+          <div class="pane-col">
+            <div class="stack">
+              <p class="eyebrow">Your room is open</p>
+              <h1>Send a friend the link.</h1>
+              <p class="lede">They click it, pick a name and land right here. Keep this tab open while they join.</p>
+            </div>
+            <div class="linkrow">
+              <div class="linkbox" id="inviteLink">getting your link…</div>
+              <button class="btn primary big copy-invite" type="button" data-label="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl">Copy link</span></button>
+            </div>
+            <p class="codeline"><span>or read them your code</span><span class="code" id="myCode">······</span></p>
+          </div>
+        </div>
+        <div class="pane pane-quiet">
+          <div class="pane-col">
+            <div class="stack">
+              <p class="eyebrow quiet">Nothing on screen yet</p>
+              <h1>The room is quiet.</h1>
+              <p class="lede">When someone presses “Share my screen”, their screen shows up here.</p>
+            </div>
+          </div>
+        </div>
+        <div class="pane pane-self">
+          <div class="pane-col">
+            <video id="localPreview" autoplay muted playsinline></video>
+            <div class="stack">
+              <p class="eyebrow live"><span class="livedot" aria-hidden="true"></span>Live</p>
+              <h1>You're sharing your screen.</h1>
+              <p class="lede" id="selfSub"></p>
+            </div>
+          </div>
+        </div>
+        <div id="streams" class="streams spotlight"></div>
+        <button class="btn glass" type="button" id="unmute" hidden><svg class="ic" aria-hidden="true"><use href="#i-volume"/></svg>Turn on sound</button>
+      </div>
+
+      <div class="dock">
+        <button class="btn tint" type="button" id="shareBtn"><svg class="ic" aria-hidden="true"><use href="#i-screen"/></svg>Share my screen</button>
+        <button class="btn stop" type="button" id="stopBtn"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg>Stop sharing</button>
+        <p class="dock-note" id="dockHint">You can start sharing before anyone arrives.</p>
+        <p class="dock-note" id="audioNote" role="status"></p>
+        <video id="miniPreview" autoplay muted playsinline aria-label="Preview of your screen"></video>
+        <div class="settings">
+          <button class="btn icon" type="button" id="settingsBtn" aria-label="Stream settings" aria-expanded="false" aria-controls="settingsPanel"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></button>
+          <div class="popover" id="settingsPanel" hidden>
+            <div class="pop-head">
+              <h2>Stream settings</h2>
+              <button class="btn ghost icon" type="button" id="settingsClose" aria-label="Close settings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+            <fieldset>
+              <legend>Picture</legend>
+              <div class="optgrid cols-2">
+                <label class="opt"><input type="radio" name="quality" value="720p30"><span class="box">720p · 30 fps</span></label>
+                <label class="opt"><input type="radio" name="quality" value="1080p30"><span class="box">1080p · 30 fps</span></label>
+                <label class="opt"><input type="radio" name="quality" value="1080p60" checked><span class="box">1080p · 60 fps</span></label>
+                <label class="opt"><input type="radio" name="quality" value="1440p60"><span class="box">1440p · 60 fps</span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Best for</legend>
+              <div class="optgrid cols-2">
+                <label class="opt"><input type="radio" name="mode" value="motion" checked><span class="box two"><b>Games and video</b><small>stays smooth</small></span></label>
+                <label class="opt"><input type="radio" name="mode" value="detail"><span class="box two"><b>Text and code</b><small>stays sharp</small></span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Codec</legend>
+              <div class="stack" style="gap:8px">
+                <div class="optgrid cols-4">
+                  <label class="opt"><input type="radio" name="codec" value="auto" checked><span class="box">Auto</span></label>
+                  <label class="opt"><input type="radio" name="codec" value="H264"><span class="box">H.264</span></label>
+                  <label class="opt"><input type="radio" name="codec" value="VP9"><span class="box">VP9</span></label>
+                  <label class="opt"><input type="radio" name="codec" value="AV1"><span class="box">AV1</span></label>
+                </div>
+                <p class="hint small">Auto suits most computers. H.264 usually runs on the graphics card.</p>
+              </div>
+            </fieldset>
+            <hr>
+            <div class="now">
+              <h3>Right now</h3>
+              <div id="statsOut"></div>
+              <p class="hint small" id="statsEmpty">Live numbers show up here while you're sharing with someone.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <aside class="side">
-      <div class="side-head">
-        <h2>People</h2>
-        <div class="row">
-          <button class="btn small copy-invite">Copy invite link</button>
-          <button class="btn small" id="leaveBtn" hidden>Leave</button>
-        </div>
+      <div class="people-wrap">
+        <h2 id="peopleTitle">In the room · 1</h2>
+        <ul class="people" id="people"></ul>
       </div>
-      <ul class="people" id="people"></ul>
-      <h2 class="chat-title">Chat</h2>
-      <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
-      <form class="chat-form" id="chatForm">
-        <input id="chatInput" maxlength="500" autocomplete="off" placeholder="Say something…" aria-label="Chat message">
-        <button class="btn primary" type="submit">Send</button>
-      </form>
+      <div class="chat">
+        <h2>Chat</h2>
+        <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" maxlength="500" autocomplete="off" placeholder="Say something" aria-label="Chat message">
+          <button class="btn icon" type="submit" aria-label="Send message"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </form>
+      </div>
     </aside>
   </main>
-
-  <footer class="controls">
-    <button class="btn primary" id="shareBtn">Share my screen</button>
-    <button class="btn stop" id="stopBtn">Stop sharing</button>
-    <label>Quality
-      <select id="quality">
-        <option value="720p30">720p · 30 fps</option>
-        <option value="1080p30">1080p · 30 fps</option>
-        <option value="1080p60" selected>1080p · 60 fps</option>
-        <option value="1440p60">1440p · 60 fps</option>
-      </select>
-    </label>
-    <label>Optimise for
-      <select id="mode">
-        <option value="motion">Games &amp; video (smooth)</option>
-        <option value="detail">Text &amp; code (sharp)</option>
-      </select>
-    </label>
-    <label>Codec
-      <select id="codec">
-        <option value="auto">Auto</option>
-        <option value="H264">H.264 (usually GPU)</option>
-        <option value="VP9">VP9</option>
-        <option value="AV1">AV1</option>
-      </select>
-    </label>
-    <div class="mine">
-      <div class="mine-info">
-        <p id="audioNote" role="status"></p>
-        <div id="statsOut"></div>
-      </div>
-      <video id="localPreview" autoplay muted playsinline></video>
-    </div>
-  </footer>
+</div>
 
 <script>
 const PREFIX = 'screenroom-v1-';          // namespaces codes on the public PeerJS server
@@ -299,13 +537,17 @@ const QUALITY = {
   '1080p60': { w: 1920, h: 1080, fps: 60, kbps: 9000 },
   '1440p60': { w: 2560, h: 1440, fps: 60, kbps: 16000 },
 };
-const COLORS = ['#7da2ff', '#6fd6a4', '#ffb86b', '#ff8fb1', '#c79bff', '#6fd0e6'];
+const COLORS = ['#e2a55a', '#9fba9c', '#9db0d0', '#d7a0a8', '#b9a6d6', '#8fc4c0'];
+const SVGNS = 'http://www.w3.org/2000/svg';
+const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
 // Everyone in the room is connected directly to everyone else. Each member:
 // { code, name, joined, conn, initiator, outCall, inCall, sharing, volume, muted, tile, row, tileVol, rowVol, last }
 const members = new Map();
 let peer, myCode, localStream, manualTarget = null;
 let layout = 'spotlight', spotCode = null, audioBlocked = false;
+let ready = false, inRoom = false, pendingJoin = null, joinTimer = null;
+let entryMode = 'start', showDetails = false;
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -318,10 +560,36 @@ function el(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
+function icon(name) {
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('class', 'ic');
+  s.setAttribute('aria-hidden', 'true');
+  const u = document.createElementNS(SVGNS, 'use');
+  u.setAttribute('href', '#i-' + name);
+  s.append(u);
+  return s;
+}
 const codeOf = id => id.slice(PREFIX.length);
 const joinedMembers = () => [...members.values()].filter(m => m.joined);
+const setting = name => document.querySelector('input[name="' + name + '"]:checked').value;
 
-function setStatus(text, kind = '') { const s = $('status'); s.textContent = text; s.className = kind; }
+function nameList(names) {
+  return names.length <= 3
+    ? names.join(', ').replace(/, ([^,]*)$/, ' and $1')
+    : names.slice(0, 2).join(', ') + ' and ' + (names.length - 2) + ' others';
+}
+
+function setStatus(text, kind = '', entryText = text) {
+  const s = $('status'); s.textContent = text; s.className = 'roomstatus ' + kind;
+  const e = $('entryStatus'); e.textContent = entryText; e.className = 'statusline ' + kind;
+}
+
+function setEntryMsg(text, kind = '') {
+  const m = $('entryMsg');
+  m.textContent = text || '';
+  m.className = 'entry-msg ' + kind;
+  m.hidden = !text;
+}
 
 function randomCode() {
   const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -338,22 +606,54 @@ function displayName() {
   return $('nameInput').value.trim().slice(0, 24) || 'Guest ' + (myCode || '').slice(0, 3);
 }
 
+const inviteUrl = () => location.origin + location.pathname + '?join=' + myCode;
+
+/* ---------- Start screen ---------- */
+function setEntryMode(mode) {
+  entryMode = mode;
+  const invited = mode === 'invited';
+  document.body.classList.toggle('invited', invited);
+  $('tabStart').setAttribute('aria-pressed', String(mode === 'start'));
+  $('tabJoin').setAttribute('aria-pressed', String(mode === 'join'));
+  $('paneStart').hidden = mode !== 'start';
+  $('paneJoin').hidden = mode === 'start';
+  $('entryTitle').textContent = invited ? 'A friend saved you a seat.' : 'Watch a screen together.';
+  $('entryLede').textContent = invited
+    ? 'Pick a name and join. Whatever they share shows up as soon as you’re in.'
+    : 'Open a room, send the link, press share. No accounts and nothing to install.';
+  // Invite links wait for a click so the browser lets their sound play
+  $('joinHint').textContent = invited
+    ? 'Joining with a click is what lets your browser play their sound.'
+    : 'Anyone already in the room can read you theirs.';
+  setEntryMsg('');
+}
+
+function enterRoom(opened) {
+  if (inRoom) return;
+  inRoom = true;
+  clearTimeout(joinTimer);
+  setEntryMsg('');
+  document.body.classList.add('in-room');
+  if (opened) addSystem('You opened the room');
+  renderMe();
+  updateRoomStatus();
+  updateStage();
+}
+
 /* ---------- Signalling (PeerJS) ---------- */
 function startPeer() {
   myCode = randomCode();
   peer = new Peer(PREFIX + myCode, { debug: 1 });
 
   peer.on('open', () => {
+    ready = true;
     $('myCode').textContent = myCode;
+    $('inviteLink').textContent = (location.host + location.pathname).replace(/index\.html$/, '') + '?join=' + myCode;
+    $('nameInput').placeholder = 'Guest ' + myCode.slice(0, 3);
+    sizeName();
     renderMe();
     updateRoomStatus();
-    // Invite links fill in the code but wait for a click, so the browser lets their sound play
-    const join = new URLSearchParams(location.search).get('join');
-    if (join && !joinedMembers().length) {
-      $('friendCode').value = join.toUpperCase();
-      $('joinHint').textContent = 'Set your name at the top, then press Connect to join.';
-      ($('nameInput').value ? $('joinBtn') : $('nameInput')).focus();
-    }
+    if (pendingJoin) { const code = pendingJoin; pendingJoin = null; connectTo(code, true); }
   });
 
   peer.on('connection', c => attachConn(c, codeOf(c.peer)));
@@ -365,7 +665,11 @@ function startPeer() {
       const code = codeOf(String(err.message).split(' ').pop());
       const m = members.get(code);
       if (m && !(m.conn && m.conn.open)) members.delete(code);
-      if (manualTarget === code) { manualTarget = null; setStatus('No one is using that code. Check it and try again.', 'bad'); }
+      if (manualTarget === code) {
+        manualTarget = null;
+        clearTimeout(joinTimer);
+        setEntryMsg('No one is using that code. Check it and try again.', 'bad');
+      }
       return;
     }
     if (err.type === 'browser-incompatible') { setStatus('This browser can’t do WebRTC. Use Chrome, Edge or Firefox.', 'bad'); return; }
@@ -386,13 +690,22 @@ function getMember(code) {
 
 function connectTo(code, manual = false) {
   code = code.trim().toUpperCase();
-  if (!code || code === myCode) return;
+  if (!code) { if (manual) setEntryMsg('Type the code your friend gave you.', 'bad'); return; }
+  if (code === myCode) { if (manual) setEntryMsg('That’s your own code. Ask your friend for theirs.', 'bad'); return; }
+  if (manual && !ready) { pendingJoin = code; setEntryMsg('Connecting…'); return; }
   const m = members.get(code);
   if (m && m.conn && (m.conn.open || !manual)) {
-    if (manual && m.joined) setStatus('Already in a room with ' + m.name, 'good');
+    if (manual && m.joined) enterRoom(false);
     return;
   }
-  if (manual) { manualTarget = code; setStatus('Connecting to ' + code + '…'); }
+  if (manual) {
+    manualTarget = code;
+    setEntryMsg('Connecting to ' + code + '…');
+    clearTimeout(joinTimer);
+    joinTimer = setTimeout(() => {
+      if (manualTarget === code && !inRoom) setEntryMsg('Still trying to reach ' + code + '. Check the code, or ask your friend to keep their tab open.', 'bad');
+    }, 12000);
+  }
   attachConn(peer.connect(PREFIX + code, { reliable: true }), myCode);
 }
 
@@ -508,24 +821,41 @@ function broadcast(msg) {
 function leaveRoom() {
   broadcast({ type: 'bye' });
   for (const m of [...members.values()]) removeMember(m, false);
-  addSystem('You left the room');
+  stopShare();
+  toggleSettings(false);
+  manualTarget = null;
+  inRoom = false;
+  document.body.classList.remove('in-room');
+  $('chatLog').replaceChildren();
+  setEntryMsg('');
+  updateRoomStatus();
 }
 
 function updateRoomStatus() {
   const others = joinedMembers();
   document.body.classList.toggle('paired', others.length > 0);
-  $('leaveBtn').hidden = !others.length;
-  if (!others.length) { setStatus(myCode ? 'Waiting for friends' : 'Starting up…'); return; }
-  const names = others.map(m => m.name);
-  const list = names.length <= 3
-    ? names.join(', ').replace(/, ([^,]*)$/, ' and $1')
-    : names.slice(0, 2).join(', ') + ' and ' + (names.length - 2) + ' others';
-  setStatus('In a room with ' + list, 'good');
+  $('peopleTitle').textContent = 'In the room · ' + (others.length + 1);
+  if (others.length && !inRoom) enterRoom(false);
+  if (!ready) setStatus('starting up…');
+  else if (!others.length) setStatus('just you so far', 'good', 'connected, ready when you are');
+  else setStatus('with ' + nameList(others.map(m => m.name)), 'good');
+  updateDock();
+}
+
+// The lines of help text that depend on who is here
+function updateDock() {
+  const others = joinedMembers();
+  $('selfSub').textContent = others.length
+    ? nameList(others.map(m => m.name)) + ' can see it. Anything they share will take over this space.'
+    : 'Nobody else is here yet. Copy the invite link up top to bring a friend in.';
+  $('dockHint').textContent = !canShare ? 'Sharing a screen needs a desktop browser.'
+    : others.length ? 'Anyone can share at the same time.'
+    : 'You can start sharing before anyone arrives.';
 }
 
 /* ---------- Sending your screen ---------- */
 async function startShare() {
-  const q = QUALITY[$('quality').value];
+  const q = QUALITY[setting('quality')];
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
@@ -540,9 +870,10 @@ async function startShare() {
     return;
   }
   const vt = localStream.getVideoTracks()[0];
-  vt.contentHint = $('mode').value;
+  vt.contentHint = setting('mode');
   vt.addEventListener('ended', stopShare);          // browser's own "Stop sharing" bar
   $('localPreview').srcObject = localStream;
+  $('miniPreview').srcObject = localStream;
   describeAudio(vt);
   document.body.classList.add('sharing');
   for (const m of joinedMembers()) callMember(m);
@@ -555,13 +886,13 @@ function describeAudio(vt) {
   const note = $('audioNote');
   const surface = vt.getSettings().displaySurface;
   if (localStream.getAudioTracks().length) {
-    note.className = '';
+    note.className = 'dock-note';
     note.textContent = surface === 'monitor'
       ? 'Sharing all sound from your computer, including voice chat and notifications.'
       : 'Sound is being shared.';
     return;
   }
-  note.className = 'warn';
+  note.className = 'dock-note warn';
   if (navigator.userAgent.includes('Firefox')) {
     note.textContent = 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.';
   } else if (surface === 'window') {
@@ -592,16 +923,19 @@ function stopShare() {
   for (const m of members.values()) if (m.outCall) { const c = m.outCall; m.outCall = null; c.close(); }
   broadcast({ type: 'sharing', on: false });
   $('localPreview').srcObject = null;
+  $('miniPreview').srcObject = null;
   $('audioNote').textContent = '';
   $('statsOut').replaceChildren();
+  $('statsEmpty').hidden = false;
+  $('settingsBtn').classList.remove('alert');
   document.body.classList.remove('sharing');
   renderMe();
 }
 
 // Bitrate / fps caps and what to sacrifice when the connection struggles
 async function applyQuality(onlyCall) {
-  const q = QUALITY[$('quality').value];
-  const pref = $('mode').value === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
+  const q = QUALITY[setting('quality')];
+  const pref = setting('mode') === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
   const calls = onlyCall ? [onlyCall] : [...members.values()].map(m => m.outCall).filter(Boolean);
   for (const call of calls) {
     if (!call.peerConnection) continue;
@@ -623,7 +957,7 @@ async function applyQuality(onlyCall) {
 
 // Move the chosen codec to the front of the offer so the other side picks it
 function preferCodec(sdp) {
-  const codec = $('codec').value;
+  const codec = setting('codec');
   if (codec === 'auto') return sdp;
   const lines = sdp.split('\r\n');
   const m = lines.findIndex(l => l.startsWith('m=video'));
@@ -668,15 +1002,49 @@ function showStream(m, stream) {
   updateStage();
 }
 
+// A labelled button on a stream; the label collapses to an icon on small tiles
+function tileButton(name, label) {
+  const b = el('button', 'btn glass');
+  b.type = 'button';
+  b.append(icon(name), el('span', 'lbl'));
+  setLabel(b, label);
+  return b;
+}
+function setLabel(b, label) {
+  b.querySelector('.lbl').textContent = label;
+  b.setAttribute('aria-label', label);
+  b.title = label;
+}
+
 function createTile(m) {
   const t = el('div', 'tile');
   const video = el('video');
   video.autoplay = true;
   video.playsInline = true;
 
-  const top = el('div', 'tile-top');
+  const tag = el('div', 'tile-tag');
+  const who = el('span', 'who');
+  const whoText = el('span');
+  const whoName = el('span', '', m.name);
+  whoText.append(whoName, el('span', 'tail', ' is sharing'));
+  who.append(el('span', 'livedot'), whoText);
+  const silent = el('span', 'chip warn', 'no sound');
+  silent.hidden = true;
+  tag.append(who, silent);
+
+  const stats = el('div', 'stats');
+  stats.hidden = !showDetails;
+
+  const ui = el('div', 'tile-ui');
   m.tileVol = volControls(m);
-  const pip = el('button', 'btn', 'Pop out');
+  const actions = el('div', 'tile-actions');
+  const details = tileButton('signal', 'Details');
+  details.setAttribute('aria-pressed', String(showDetails));
+  details.addEventListener('click', () => setDetails(!showDetails));
+  const lay = tileButton('grid', 'Grid view');
+  lay.classList.add('layout-btn');
+  lay.addEventListener('click', toggleLayout);
+  const pip = tileButton('pip', 'Pop out');
   pip.hidden = !document.pictureInPictureEnabled;
   pip.addEventListener('click', async () => {
     try {
@@ -684,29 +1052,42 @@ function createTile(m) {
       else await video.requestPictureInPicture();
     } catch (e) { console.warn('Picture-in-picture failed', e); }
   });
-  video.addEventListener('enterpictureinpicture', () => pip.textContent = 'Pop back in');
-  video.addEventListener('leavepictureinpicture', () => pip.textContent = 'Pop out');
+  video.addEventListener('enterpictureinpicture', () => setLabel(pip, 'Pop back in'));
+  video.addEventListener('leavepictureinpicture', () => setLabel(pip, 'Pop out'));
   // Fullscreen the whole tile so the volume controls stay available
-  const fs = el('button', 'btn', 'Fullscreen');
+  const fs = tileButton('full', 'Fullscreen');
   fs.addEventListener('click', () => {
     if (document.fullscreenElement) document.exitFullscreen(); else t.requestFullscreen();
   });
-  top.append(m.tileVol.root, pip, fs);
+  actions.append(details, lay, pip, fs);
+  ui.append(m.tileVol.root, actions);
 
-  const bottom = el('div', 'tile-bottom');
-  const who = el('span', 'who', m.name);
-  const silent = el('span', 'chip warn', 'no sound');
-  silent.hidden = true;
-  const stats = el('div', 'stats row');
-  bottom.append(who, silent, stats);
+  t.append(video, tag, stats, ui);
 
-  t.append(video, top, bottom);
+  // Controls wake when the pointer moves and fade again once it rests
+  let sleep;
+  const wake = () => {
+    t.classList.add('awake');
+    clearTimeout(sleep);
+    sleep = setTimeout(() => { if (ui.matches(':hover') || ui.querySelector(':focus-visible')) wake(); else t.classList.remove('awake'); }, 2600);
+  };
+  t.addEventListener('pointermove', wake);
+  t.addEventListener('pointerdown', wake);
+  t.addEventListener('focusin', wake);
+  t.addEventListener('pointerleave', () => { clearTimeout(sleep); t.classList.remove('awake'); });
+
+  const swap = () => { spotCode = m.code; updateStage(); };
   t.addEventListener('click', e => {
     if (layout !== 'spotlight' || spotCode === m.code || e.target.closest('button, input')) return;
-    spotCode = m.code;
-    updateStage();
+    swap();
   });
-  m.tile = { el: t, video, who, silent, stats };
+  t.addEventListener('keydown', e => {
+    if (e.target !== t || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    if (layout === 'spotlight' && spotCode !== m.code) swap();
+  });
+
+  m.tile = { el: t, video, who: whoName, silent, stats, details };
   $('streams').append(t);
 }
 
@@ -727,21 +1108,53 @@ function removeTile(m) {
   updateStage();
 }
 
+function toggleLayout() {
+  layout = layout === 'spotlight' ? 'grid' : 'spotlight';
+  updateStage();
+}
+
+function setDetails(on) {
+  showDetails = on;
+  for (const m of members.values()) {
+    if (!m.tile) continue;
+    m.tile.stats.hidden = !on;
+    if (!on) m.tile.stats.replaceChildren();
+    m.tile.details.setAttribute('aria-pressed', String(on));
+  }
+}
+
 function updateStage() {
   const tiles = [...members.values()].filter(m => m.tile);
   document.body.classList.toggle('watching', tiles.length > 0);
   $('streams').className = 'streams ' + (tiles.length > 1 ? layout : 'spotlight solo');
-  for (const m of tiles) m.tile.el.classList.toggle('spot', m.code === spotCode);
-  $('layoutBtn').hidden = tiles.length < 2;
-  $('layoutBtn').textContent = layout === 'spotlight' ? 'Grid view' : 'Spotlight view';
+  for (const m of tiles) {
+    const t = m.tile.el;
+    const spot = m.code === spotCode;
+    t.classList.toggle('spot', spot);
+    // In spotlight view the small tiles act as buttons that swap the big one
+    if (tiles.length > 1 && layout === 'spotlight' && !spot) {
+      t.tabIndex = 0;
+      t.setAttribute('role', 'button');
+      t.setAttribute('aria-label', 'Switch to ' + m.name + '’s screen');
+    } else {
+      t.removeAttribute('tabindex');
+      t.removeAttribute('role');
+      t.removeAttribute('aria-label');
+    }
+  }
+  for (const b of document.querySelectorAll('.layout-btn')) {
+    b.hidden = tiles.length < 2;
+    setLabel(b, layout === 'spotlight' ? 'Grid view' : 'Spotlight view');
+  }
   $('unmute').hidden = !(audioBlocked && tiles.length);
 }
 
 /* ---------- Per-person volume ---------- */
 function volControls(m) {
   const root = el('div', 'vol');
-  const btn = el('button', 'btn');
+  const btn = el('button', 'btn ghost volbtn');
   btn.type = 'button';
+  btn.append(icon('volume'), icon('muted'));
   const range = el('input');
   range.type = 'range';
   range.min = 0;
@@ -768,7 +1181,9 @@ function applyAudio(m) {
     ui.range.value = m.volume;
     ui.range.setAttribute('aria-label', 'Volume for ' + m.name);
     ui.pct.textContent = m.volume + '%';
-    ui.btn.textContent = m.muted ? 'Unmute' : 'Mute';
+    ui.btn.classList.toggle('off', m.muted || m.volume === 0);
+    ui.btn.setAttribute('aria-label', (m.muted ? 'Unmute ' : 'Mute ') + m.name);
+    ui.btn.title = m.muted ? 'Unmute' : 'Mute';
     ui.btn.setAttribute('aria-pressed', String(m.muted));
   }
 }
@@ -792,9 +1207,10 @@ function renderMe() {
   const name = displayName();
   const dot = el('span', 'dot');
   dot.style.background = colorFor(name);
-  const state = el('span', 'pstate' + (localStream ? ' live' : ''), localStream ? 'sharing' : '');
+  $('meDot').style.background = colorFor(name);
   const head = el('div', 'phead');
-  head.append(dot, el('span', 'pname', name + ' (you)'), state);
+  head.append(dot, el('span', 'pname', name), el('span', 'pyou', 'you'));
+  if (localStream) head.append(el('span', 'pstate live', 'sharing'));
   row.replaceChildren(head);
 }
 
@@ -810,6 +1226,7 @@ function renderRow(m) {
   m.rowVol = null;
   if (m.tile) {
     m.rowVol = volControls(m);
+    m.rowVol.root.classList.add('rowvol');
     m.row.append(m.rowVol.root);
   }
   applyAudio(m);
@@ -874,20 +1291,30 @@ setInterval(async () => {
   statsBusy = true;
   try {
     const outRows = [];
+    let limited = false;
     for (const m of [...members.values()]) {
-      if (m.tile && m.inCall && m.inCall.peerConnection) {
-        m.tile.stats.replaceChildren(...chipEls(await statsChips(m.inCall.peerConnection, 'in', m)));
+      // Incoming numbers are only worked out while "Details" is switched on
+      if (showDetails && m.tile && m.inCall && m.inCall.peerConnection) {
+        const chips = await statsChips(m.inCall.peerConnection, 'in', m);
+        if (m.tile) m.tile.stats.replaceChildren(...chipEls(chips));
       }
       if (m.outCall && m.outCall.peerConnection) {
         const chips = await statsChips(m.outCall.peerConnection, 'out', m);
         if (chips.length) {
-          const row = el('div', 'stats row');
-          row.append(el('span', 'name', m.name), ...chipEls(chips));
+          if (chips.some(([t]) => t.startsWith('limited by'))) limited = true;
+          const row = el('div', 'statrow');
+          const line = el('span', 'statline');
+          line.append(...chipEls(chips));
+          row.append(el('span', 'name', 'To ' + m.name), line);
           outRows.push(row);
         }
       }
     }
-    if (localStream) $('statsOut').replaceChildren(...outRows);
+    if (localStream) {
+      $('statsOut').replaceChildren(...outRows);
+      $('statsEmpty').hidden = outRows.length > 0;
+      $('settingsBtn').classList.toggle('alert', limited);   // a quiet nudge when the stream is being held back
+    }
   } catch (e) {
     console.warn('Stats failed', e);
   } finally {
@@ -896,26 +1323,52 @@ setInterval(async () => {
 }, 1000);
 
 /* ---------- UI wiring ---------- */
-$('joinForm').addEventListener('submit', e => { e.preventDefault(); connectTo($('friendCode').value, true); });
+$('tabStart').addEventListener('click', () => setEntryMode('start'));
+$('tabJoin').addEventListener('click', () => { setEntryMode('join'); $('friendCode').focus(); });
+$('ownRoomBtn').addEventListener('click', () => {
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  $('friendCode').value = '';
+  setEntryMode('start');
+});
+$('entryForm').addEventListener('submit', e => {
+  e.preventDefault();
+  if (entryMode === 'start') enterRoom(true);
+  else connectTo($('friendCode').value, true);
+});
+
 $('shareBtn').addEventListener('click', startShare);
 $('stopBtn').addEventListener('click', stopShare);
 $('leaveBtn').addEventListener('click', leaveRoom);
 
 for (const b of document.querySelectorAll('.copy-invite')) {
   b.addEventListener('click', async () => {
-    const link = location.origin + location.pathname + '?join=' + myCode;
-    try { await navigator.clipboard.writeText(link); b.textContent = 'Link copied'; }
-    catch (e) { prompt('Copy this link:', link); }
-    setTimeout(() => b.textContent = 'Copy invite link', 2000);
+    const lbl = b.querySelector('.lbl');
+    try { await navigator.clipboard.writeText(inviteUrl()); lbl.textContent = 'Link copied'; }
+    catch (e) { prompt('Copy this link:', inviteUrl()); }
+    setTimeout(() => lbl.textContent = b.dataset.label, 2000);
   });
 }
 
-$('nameInput').value = store.get('screenroom-name') || '';
-$('nameInput').addEventListener('change', () => {
+// Your name lives in two places (start screen and room header); keep them in step
+function sizeName() {
+  const i = $('nameInput');
+  i.style.width = Math.max(4, (i.value || i.placeholder).length + 1) + 'ch';
+}
+function saveName() {
   store.set('screenroom-name', $('nameInput').value.trim());
   broadcast({ type: 'name', name: displayName() });
   renderMe();
-});
+}
+for (const i of [$('nameInput'), $('entryName')]) {
+  i.value = store.get('screenroom-name') || '';
+  i.addEventListener('input', () => {
+    for (const other of [$('nameInput'), $('entryName')]) if (other !== i) other.value = i.value;
+    sizeName();
+  });
+  i.addEventListener('change', saveName);
+}
+$('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('nameInput').blur(); });
+sizeName();
 
 $('chatForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -931,32 +1384,59 @@ $('unmute').addEventListener('click', unblockAudio);
 document.addEventListener('pointerdown', unblockAudio);
 document.addEventListener('keydown', unblockAudio);
 
-$('layoutBtn').addEventListener('click', () => {
-  layout = layout === 'spotlight' ? 'grid' : 'spotlight';
-  updateStage();
+// Stream settings live in one menu
+function toggleSettings(open) {
+  const p = $('settingsPanel');
+  const show = open === undefined ? p.hidden : open;
+  p.hidden = !show;
+  $('settingsBtn').setAttribute('aria-expanded', String(show));
+}
+$('settingsBtn').addEventListener('click', () => toggleSettings());
+$('settingsClose').addEventListener('click', () => { toggleSettings(false); $('settingsBtn').focus(); });
+document.addEventListener('pointerdown', e => {
+  if (!$('settingsPanel').hidden && !e.target.closest('.settings')) toggleSettings(false);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('settingsPanel').hidden) { toggleSettings(false); $('settingsBtn').focus(); }
 });
 
-$('quality').addEventListener('change', () => {
-  if (!localStream) return;
-  const q = QUALITY[$('quality').value];
-  localStream.getVideoTracks()[0].applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } });
-  applyQuality();
-});
-$('mode').addEventListener('change', () => {
-  if (localStream) localStream.getVideoTracks()[0].contentHint = $('mode').value;
-  applyQuality();
-});
-$('codec').addEventListener('change', () => {
-  if (localStream) for (const m of joinedMembers()) callMember(m);
-});
+for (const r of document.querySelectorAll('input[name="quality"]')) {
+  r.addEventListener('change', () => {
+    if (!localStream) return;
+    const q = QUALITY[setting('quality')];
+    localStream.getVideoTracks()[0].applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } });
+    applyQuality();
+  });
+}
+for (const r of document.querySelectorAll('input[name="mode"]')) {
+  r.addEventListener('change', () => {
+    if (localStream) localStream.getVideoTracks()[0].contentHint = setting('mode');
+    applyQuality();
+  });
+}
+for (const r of document.querySelectorAll('input[name="codec"]')) {
+  r.addEventListener('change', () => {
+    if (localStream) for (const m of joinedMembers()) callMember(m);
+  });
+}
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
 
-if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+if (!canShare) {
   $('shareBtn').disabled = true;
   $('shareBtn').title = 'Screen sharing needs a desktop browser over https';
 }
 
+// Arriving from an invite link: show the code and wait for one click
+const invite = (new URLSearchParams(location.search).get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+if (invite) {
+  $('friendCode').value = invite;
+  $('invitedCode').textContent = invite;
+  setEntryMode('invited');
+  ($('entryName').value ? $('joinBtn') : $('entryName')).focus();
+}
+
+updateDock();
 startPeer();
 </script>
 </body>

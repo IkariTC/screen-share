@@ -98,6 +98,12 @@
   .statusline.bad { color: var(--rust); }
   .statusline.bad::before { background: var(--rust); }
   .entry-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 24px 96px; }
+  /* An invite shows just the card, centred on the screen: equal rows above and below it */
+  body.invited .entry { display: grid; grid-template-rows: 1fr auto 1fr; }
+  body.invited .top { align-self: start; }
+  body.invited .entry-main { padding: 72px 24px; }
+  body.invited .entry-col { position: relative; }
+  body.invited .entry-col > .foot { position: absolute; top: calc(100% + 28px); left: 0; right: 0; }
   .entry-col { width: 100%; max-width: 448px; display: flex; flex-direction: column; gap: 28px; }
   .intro { display: flex; flex-direction: column; gap: 12px; }
   .card {
@@ -368,8 +374,7 @@
   </header>
   <main class="entry-main">
     <div class="entry-col">
-      <div class="intro">
-        <p class="eyebrow invited-only">You're invited</p>
+      <div class="intro fresh-only">
         <h1 id="entryTitle">Watch a screen together.</h1>
         <p class="lede" id="entryLede">Open a room, send the link, press share. No accounts and nothing to install.</p>
       </div>
@@ -617,14 +622,7 @@ function setEntryMode(mode) {
   $('tabJoin').setAttribute('aria-pressed', String(mode === 'join'));
   $('paneStart').hidden = mode !== 'start';
   $('paneJoin').hidden = mode === 'start';
-  $('entryTitle').textContent = invited ? 'A friend saved you a seat.' : 'Watch a screen together.';
-  $('entryLede').textContent = invited
-    ? 'Pick a name and join. Whatever they share shows up as soon as you’re in.'
-    : 'Open a room, send the link, press share. No accounts and nothing to install.';
-  // Invite links wait for a click so the browser lets their sound play
-  $('joinHint').textContent = invited
-    ? 'Joining with a click is what lets your browser play their sound.'
-    : 'Anyone already in the room can read you theirs.';
+  $('joinHint').hidden = invited;
   setEntryMsg('');
 }
 

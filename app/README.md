@@ -2,7 +2,7 @@
 
 The same room as the website, as a single `.exe`. Sharing always includes your computer's sound, so friends on Firefox can share with sound too. People in the app and people on the website join the same rooms.
 
-- **Share my screen** shares your main screen and all sound from your computer (games, videos, voice chat, notifications).
+- **Share my screen** opens a picker with every screen and open window (browser, game, Discord…). Whichever you pick, all sound from your computer goes out with it: games, videos, voice chat, notifications.
 - While you share, friends' streams are muted on your end, so they don't hear themselves back.
 - Invite links point at the website; friends can open them in any browser, or type the code into the app.
 

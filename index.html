@@ -268,7 +268,7 @@
   .pop-head h2 { font-size: 17px; font-weight: 600; }
   .pop-head .btn { width: 40px; height: 40px; margin-right: -8px; }
   fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-  legend, .now h3, .side h2 { padding: 0; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  legend, .now h3, .side h2, .picker-body h3 { padding: 0; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   legend { margin-bottom: 8px; }
   .optgrid { display: grid; gap: 8px; }
   .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -331,6 +331,33 @@
   .knock-actions { display: flex; gap: 8px; }
   .knock-actions .btn.primary { flex: 1; }
 
+  /* The app's own picker for screens and windows */
+  .picker {
+    width: min(920px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border-radius: 20px;
+    border: 1px solid var(--line-strong); background: var(--raised); color: var(--text); box-shadow: 0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .picker::backdrop { background: rgba(8,6,5,.72); }
+  .picker-box { display: flex; flex-direction: column; max-height: calc(100dvh - 50px); }
+  .picker .pop-head { padding: 20px 20px 12px; }
+  .pop-tools { display: flex; gap: 4px; margin-right: -8px; }
+  .picker .pop-head .btn { margin-right: 0; }
+  .picker-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 4px 20px 20px; }
+  .srcgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 10px; }
+  .src {
+    display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border-radius: 14px;
+    border: 1px solid var(--line-strong); background: var(--surface); text-align: left; transition: border-color .15s, background .15s;
+  }
+  .src:hover { border-color: var(--muted); }
+  .src[aria-pressed="true"] { border-color: var(--amber); background: rgba(226,165,90,.14); box-shadow: 0 0 0 3px rgba(226,165,90,.18); }
+  .src > img { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--stage); object-fit: contain; }
+  .src-label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
+  .src-icon { width: 16px; height: 16px; flex: none; }
+  .src-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .src-detail { font: 12.5px var(--mono); color: var(--muted); }
+  .picker-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line-strong); }
+  .picker-foot .hint { flex: 1 1 240px; }
+  .picker-actions { margin-left: auto; display: flex; gap: 10px; }
+
   @media (max-width: 900px) {
     .app { height: auto; min-height: 100dvh; }
     .room { grid-template-columns: minmax(0, 1fr); }
@@ -367,6 +394,7 @@
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
   </defs>
 </svg>
 
@@ -534,6 +562,37 @@
 
 <!-- People asking to join; shown on the start screen too -->
 <div class="knocks" id="knocks" aria-live="polite"></div>
+
+<!-- The Windows app's picker: which screen or window to share -->
+<dialog class="picker" id="picker" aria-labelledby="pickerTitle">
+  <form method="dialog" class="picker-box">
+    <div class="pop-head">
+      <h2 id="pickerTitle">Choose what to share</h2>
+      <div class="pop-tools">
+        <button class="btn ghost icon" type="button" id="pickRefresh" aria-label="Refresh the list" title="Refresh the list"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+        <button class="btn ghost icon" value="cancel" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+    </div>
+    <div class="picker-body">
+      <section>
+        <h3>Screens</h3>
+        <div class="srcgrid" id="screenList"></div>
+      </section>
+      <section>
+        <h3>Windows</h3>
+        <div class="srcgrid" id="windowList"></div>
+        <p class="hint small" id="windowEmpty" hidden>No open windows to share. Minimised windows don’t show up.</p>
+      </section>
+    </div>
+    <div class="picker-foot">
+      <p class="hint small">All sound from your computer is shared, whichever you pick.</p>
+      <div class="picker-actions">
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn primary" value="share" id="pickShare" disabled>Share</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <script>
 const PREFIX = 'screenroom-v1-';          // namespaces codes on the public PeerJS server
@@ -948,6 +1007,10 @@ function updateDock() {
 /* ---------- Sending your screen ---------- */
 async function startShare() {
   const q = QUALITY[setting('quality')];
+  if (inApp) {
+    const id = await pickSource();
+    if (!id || !(await window.screenRoomApp.choose(id))) return;
+  }
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
@@ -959,6 +1022,7 @@ async function startShare() {
     });
   } catch (e) {
     if (e.name !== 'NotAllowedError') setStatus('Couldn’t start sharing: ' + e.message, 'bad');
+    else if (inApp) setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad');
     return;
   }
   const vt = localStream.getVideoTracks()[0];
@@ -981,7 +1045,7 @@ function describeAudio(vt) {
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
     note.textContent = inApp
-      ? 'Sharing your main screen and all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.'
+      ? 'Sharing “' + vt.label + '” with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.'
       : surface === 'monitor'
       ? 'Sharing all sound from your computer, including voice chat and notifications.'
       : 'Sound is being shared.';
@@ -999,6 +1063,65 @@ function describeAudio(vt) {
   } else {
     note.textContent = 'No sound is being shared.';
   }
+}
+
+/* ---------- The app's picker ---------- */
+// The Windows app has no built-in picker, so it lists screens and windows here.
+// Resolves with the chosen source's id, or null if the picker was closed.
+let picked = null;
+
+function pickSource() {
+  const d = $('picker');
+  selectSource(null);
+  d.returnValue = '';
+  d.showModal();
+  loadSources().then(() => {
+    const current = document.querySelector('.src[aria-pressed="true"]');
+    if (d.open && current) current.focus();
+  });
+  return new Promise(resolve => {
+    d.addEventListener('close', () => resolve(d.returnValue === 'share' ? picked : null), { once: true });
+  });
+}
+
+async function loadSources() {
+  let list = [];
+  try { list = await window.screenRoomApp.sources(); } catch (e) { console.warn('Listing screens failed', e); }
+  $('screenList').replaceChildren(...list.filter(s => s.kind === 'screen').map(sourceOption));
+  $('windowList').replaceChildren(...list.filter(s => s.kind === 'window').map(sourceOption));
+  $('windowEmpty').hidden = list.some(s => s.kind === 'window');
+  // Keep the choice across a refresh; otherwise start on the main screen
+  const keep = list.find(s => s.id === picked) || list.find(s => s.primary) || list[0];
+  selectSource(keep ? keep.id : null);
+}
+
+function sourceOption(s) {
+  const b = el('button', 'src');
+  b.type = 'button';
+  b.dataset.id = s.id;
+  b.title = s.name;
+  const shot = el('img');
+  shot.src = s.thumbnail;
+  shot.alt = '';
+  const label = el('span', 'src-label');
+  if (s.icon) {
+    const i = el('img', 'src-icon');
+    i.src = s.icon;
+    i.alt = '';
+    label.append(i);
+  }
+  label.append(el('span', 'src-name', s.name));
+  b.append(shot, label);
+  if (s.detail) b.append(el('span', 'src-detail', s.detail));
+  b.addEventListener('click', () => selectSource(s.id));
+  b.addEventListener('dblclick', () => { selectSource(s.id); $('picker').close('share'); });
+  return b;
+}
+
+function selectSource(id) {
+  picked = id;
+  for (const b of document.querySelectorAll('.src')) b.setAttribute('aria-pressed', String(b.dataset.id === id));
+  $('pickShare').disabled = !id;
 }
 
 function callMember(m) {
@@ -1522,7 +1645,8 @@ for (const r of document.querySelectorAll('input[name="codec"]')) {
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
 
-if (inApp) $('soundFoot').textContent = 'Sharing shows your main screen, with all your computer’s sound.';
+if (inApp) $('soundFoot').textContent = 'Share any screen or window, with all your computer’s sound.';
+$('pickRefresh').addEventListener('click', loadSources);
 
 if (!canShare) {
   $('shareBtn').disabled = true;

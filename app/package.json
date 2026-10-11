@@ -24,6 +24,7 @@
     "productName": "Screen Room",
     "files": [
       "main.js",
+      "preload.js",
       "web/**"
     ],
     "directories": {

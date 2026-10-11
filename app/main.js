@@ -1,11 +1,16 @@
-// Screen Room as a Windows app. It runs the same page as the website, with one difference:
-// sharing always includes your computer's sound, which Firefox can't do.
-const { app, BrowserWindow, Menu, desktopCapturer, net, protocol, session, shell } = require('electron');
+// Screen Room as a Windows app. It runs the same page as the website, with two differences:
+// you pick any screen or window from the app's own picker, and sharing always includes your
+// computer's sound, which Firefox can't do.
+const { app, BrowserWindow, Menu, desktopCapturer, ipcMain, net, protocol, screen, session, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
 const WEB = path.join(__dirname, 'web');
 const ORIGIN = 'app://screen-room';
+const SOURCE_ID = /^(screen|window):\d+:\d+$/;
+
+// The screen or window picked in the page's picker; the next capture uses it, once
+let chosen = null;
 
 // The page is served from app://screen-room instead of file://, so it gets a proper origin
 // (localStorage, secure context) and a Content-Security-Policy that only runs the bundled scripts.
@@ -47,17 +52,58 @@ function lockDown(ses) {
     callback(ALLOWED.has(permission) || (permission === 'media' && screenOnly(details))));
   ses.setPermissionCheckHandler((wc, permission) => ALLOWED.has(permission));
 
-  // "Share my screen": the main screen plus everything the computer is playing.
+  // "Share my screen": whatever was picked in the page, plus everything the computer is playing.
   // Windows loopback captures all system sound, so the page mutes friends' streams while you share.
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
+    const id = chosen;
+    chosen = null;
+    let source = null;
     try {
-      const [screen] = await desktopCapturer.getSources({ types: ['screen'] });
-      if (!screen) return callback({});
-      callback(request.audioRequested ? { video: screen, audio: 'loopback' } : { video: screen });
+      const sources = id ? await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } }) : [];
+      source = sources.find(s => s.id === id) || null;
     } catch (e) {
-      console.error('Screen capture failed', e);
-      callback({});
+      console.error('Listing screens failed', e);
     }
+    // null refuses: nothing was picked, or the window has closed since
+    if (!source) return callback(null);
+    callback(request.audioRequested ? { video: source, audio: 'loopback' } : { video: source });
+  });
+}
+
+// Node reports the origin of custom-scheme URLs as "null", so compare scheme and host instead
+const isPage = url => {
+  try { const u = new URL(url); return u.protocol === 'app:' && u.host === 'screen-room'; } catch (err) { return false; }
+};
+const fromPage = e => !!e.senderFrame && isPage(e.senderFrame.url);
+const jpeg = image => 'data:image/jpeg;base64,' + image.toJPEG(80).toString('base64');
+
+// The picker in the page asks for screens and windows here (via preload.js), then says which one to share
+function servePicker() {
+  ipcMain.handle('sources', async e => {
+    if (!fromPage(e)) return [];
+    const own = BrowserWindow.fromWebContents(e.sender)?.getMediaSourceId();
+    const displays = screen.getAllDisplays();
+    const primary = screen.getPrimaryDisplay().id;
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'], thumbnailSize: { width: 384, height: 216 }, fetchWindowIcons: true,
+    });
+    let n = 0;
+    return sources
+      .filter(s => s.id !== own && !s.thumbnail.isEmpty())   // not this app, nor minimised windows
+      .map(s => {
+        if (s.id.startsWith('window:')) {
+          return { id: s.id, kind: 'window', name: s.name, thumbnail: jpeg(s.thumbnail), icon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : null };
+        }
+        const d = displays.find(x => String(x.id) === s.display_id);
+        const size = d ? Math.round(d.size.width * d.scaleFactor) + '×' + Math.round(d.size.height * d.scaleFactor) : '';
+        const main = !!d && d.id === primary;
+        return { id: s.id, kind: 'screen', name: 'Screen ' + ++n, detail: [size, main && 'main'].filter(Boolean).join(' · '), primary: main, thumbnail: jpeg(s.thumbnail) };
+      });
+  });
+  ipcMain.handle('choose', (e, id) => {
+    if (!fromPage(e) || typeof id !== 'string' || !SOURCE_ID.test(id)) return false;
+    chosen = id;
+    return true;
   });
 }
 
@@ -74,6 +120,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -83,7 +130,7 @@ function createWindow() {
   };
   win.webContents.setWindowOpenHandler(({ url }) => { external(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => {
-    if (new URL(url).origin === ORIGIN) return;
+    if (isPage(url)) return;
     e.preventDefault();
     external(url);
   });
@@ -104,6 +151,7 @@ app.on('web-contents-created', (e, contents) => {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   serveWeb();
+  servePicker();
   lockDown(session.defaultSession);
   createWindow();
 });

@@ -25,13 +25,15 @@
     "files": [
       "main.js",
       "preload.js",
+      "icon.png",
       "web/**"
     ],
     "directories": {
       "output": "dist"
     },
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "icon.png"
     },
     "portable": {
       "artifactName": "ScreenRoom-${version}.exe"

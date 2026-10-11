@@ -115,6 +115,7 @@ function createWindow() {
     minHeight: 520,
     backgroundColor: '#171311',
     title: 'Screen Room',
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

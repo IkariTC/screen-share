@@ -9,7 +9,7 @@
     "web": "node copy-web.js",
     "native": "node native/build.js",
     "start": "npm run web && npm run native && electron .",
-    "build": "npm run web && npm run native && electron-builder --win portable"
+    "build": "npm run web && npm run native && electron-builder --win"
   },
   "devDependencies": {
     "electron": "44.4.5",
@@ -32,12 +32,20 @@
     "directories": {
       "output": "dist"
     },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "compression": "maximum",
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "icon.png"
     },
-    "portable": {
-      "artifactName": "ScreenRoom-${version}.exe"
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "packElevateHelper": false,
+      "differentialPackage": false,
+      "artifactName": "ScreenRoom-Setup-${version}.exe"
     },
     "extraResources": [
       {

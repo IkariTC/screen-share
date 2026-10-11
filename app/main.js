@@ -87,6 +87,19 @@ function lockDown(ses) {
   });
 }
 
+// Only Chromium's English locale ships (electronLanguages in package.json), which would put spellcheck
+// and the page's clock in American English everywhere. Both follow Windows' language instead.
+function systemLanguage() {
+  const lang = app.getPreferredSystemLanguages()[0];
+  try { return lang && Intl.DateTimeFormat.supportedLocalesOf(lang).length ? lang : null; } catch (err) { return null; }
+}
+
+function spellcheckIn(ses, lang) {
+  const available = ses.availableSpellCheckerLanguages;
+  const match = available.find(l => l.toLowerCase() === lang.toLowerCase()) || available.find(l => l === lang.split('-')[0]);
+  if (match) ses.setSpellCheckerLanguages([match]);
+}
+
 // Node reports the origin of custom-scheme URLs as "null", so compare scheme and host instead
 const isPage = url => {
   try { const u = new URL(url); return u.protocol === 'app:' && u.host === 'screen-room'; } catch (err) { return false; }
@@ -199,7 +212,7 @@ function stopSound() {
   child.kill();
 }
 
-function createWindow() {
+function createWindow(lang) {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -214,6 +227,7 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: lang ? ['--screen-room-locale=' + lang] : [],
     },
   });
 
@@ -247,7 +261,9 @@ app.whenReady().then(() => {
   serveWeb();
   servePicker();
   lockDown(session.defaultSession);
-  createWindow();
+  const lang = systemLanguage();
+  if (lang) spellcheckIn(session.defaultSession, lang);
+  createWindow(lang);
   canSplitSound();                                       // ask early so the picker opens quickly
 });
 

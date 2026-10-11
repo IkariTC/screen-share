@@ -1515,7 +1515,7 @@ function renderRow(m) {
 function appendLog(li) {
   const log = $('chatLog');
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-  li.title = new Date().toLocaleTimeString();
+  li.title = new Date().toLocaleTimeString(inApp ? window.screenRoomApp.locale : undefined);
   log.append(li);
   if (atBottom) log.scrollTop = log.scrollHeight;
 }

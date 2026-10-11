@@ -7,8 +7,9 @@
   "main": "main.js",
   "scripts": {
     "web": "node copy-web.js",
-    "start": "npm run web && electron .",
-    "build": "npm run web && electron-builder --win portable"
+    "native": "node native/build.js",
+    "start": "npm run web && npm run native && electron .",
+    "build": "npm run web && npm run native && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "44.4.5",
@@ -37,6 +38,12 @@
     },
     "portable": {
       "artifactName": "ScreenRoom-${version}.exe"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "native/bin/screen-room-sound.exe",
+        "to": "screen-room-sound.exe"
+      }
+    ]
   }
 }

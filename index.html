@@ -349,7 +349,9 @@
   }
   .src:hover { border-color: var(--muted); }
   .src[aria-pressed="true"] { border-color: var(--amber); background: rgba(226,165,90,.14); box-shadow: 0 0 0 3px rgba(226,165,90,.18); }
-  .src > img { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--stage); object-fit: contain; }
+  .src-shot { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--stage); overflow: hidden; }
+  .src-shot img { width: 100%; height: 100%; object-fit: contain; }
+  .src-shot img.src-big { width: 48px; height: 48px; opacity: .85; }
   .src-label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
   .src-icon { width: 16px; height: 16px; flex: none; }
   .src-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -585,7 +587,7 @@
       </section>
     </div>
     <div class="picker-foot">
-      <p class="hint small">All sound from your computer is shared, whichever you pick.</p>
+      <p class="hint small" id="pickSound">All sound from your computer is shared, whichever you pick.</p>
       <div class="picker-actions">
         <button class="btn ghost" value="cancel">Cancel</button>
         <button class="btn primary" value="share" id="pickShare" disabled>Share</button>
@@ -1009,7 +1011,10 @@ async function startShare() {
   const q = QUALITY[setting('quality')];
   if (inApp) {
     const id = await pickSource();
-    if (!id || !(await window.screenRoomApp.choose(id))) return;
+    if (!id) return;
+    const plan = await window.screenRoomApp.choose(id);
+    if (!plan) { setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad'); return; }
+    appShare = { sound: plan.sound, ctx: null };
   }
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
@@ -1023,7 +1028,12 @@ async function startShare() {
   } catch (e) {
     if (e.name !== 'NotAllowedError') setStatus('Couldn’t start sharing: ' + e.message, 'bad');
     else if (inApp) setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad');
+    appShare = null;
     return;
+  }
+  if (appShare && appShare.sound !== 'system') {
+    const track = await appSoundTrack();
+    if (track) localStream.addTrack(track);
   }
   const vt = localStream.getVideoTracks()[0];
   vt.contentHint = setting('mode');
@@ -1031,7 +1041,7 @@ async function startShare() {
   $('localPreview').srcObject = localStream;
   $('miniPreview').srcObject = localStream;
   describeAudio(vt);
-  for (const m of members.values()) applyAudio(m);  // the app mutes friends' streams while it shares sound
+  for (const m of members.values()) applyAudio(m);  // see echoGuard
   document.body.classList.add('sharing');
   for (const m of joinedMembers()) callMember(m);
   broadcast({ type: 'sharing', on: true });
@@ -1042,17 +1052,20 @@ async function startShare() {
 function describeAudio(vt) {
   const note = $('audioNote');
   const surface = vt.getSettings().displaySurface;
+  const what = '“' + vt.label + '”';
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
-    note.textContent = inApp
-      ? 'Sharing “' + vt.label + '” with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.'
-      : surface === 'monitor'
-      ? 'Sharing all sound from your computer, including voice chat and notifications.'
-      : 'Sound is being shared.';
+    note.textContent = !inApp
+      ? (surface === 'monitor' ? 'Sharing all sound from your computer, including voice chat and notifications.' : 'Sound is being shared.')
+      : appShare.sound === 'window' ? 'Sharing ' + what + ' with only its own sound.'
+      : appShare.sound === 'others' ? 'Sharing ' + what + ' with all sound from your computer, except this room’s.'
+      : 'Sharing ' + what + ' with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.';
     return;
   }
   note.className = 'dock-note warn';
-  if (navigator.userAgent.includes('Firefox')) {
+  if (inApp) {
+    note.textContent = 'No sound: the app couldn’t pick up sound for ' + what + '. Stop and share again to retry.';
+  } else if (navigator.userAgent.includes('Firefox')) {
     note.textContent = 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.';
   } else if (surface === 'window') {
     note.textContent = 'No sound: this browser can’t share sound from a single window. Stop, then share your Entire screen with “Share system audio” ticked.';
@@ -1085,11 +1098,14 @@ function pickSource() {
 }
 
 async function loadSources() {
-  let list = [];
-  try { list = await window.screenRoomApp.sources(); } catch (e) { console.warn('Listing screens failed', e); }
+  let list = [], split = false;
+  try { ({ sources: list, split } = await window.screenRoomApp.sources()); } catch (e) { console.warn('Listing screens failed', e); }
   $('screenList').replaceChildren(...list.filter(s => s.kind === 'screen').map(sourceOption));
   $('windowList').replaceChildren(...list.filter(s => s.kind === 'window').map(sourceOption));
   $('windowEmpty').hidden = list.some(s => s.kind === 'window');
+  $('pickSound').textContent = split
+    ? 'A window shares only its own sound. A screen shares all sound except this room’s.'
+    : 'All sound from your computer is shared, whichever you pick.';
   // Keep the choice across a refresh; otherwise start on the main screen
   const keep = list.find(s => s.id === picked) || list.find(s => s.primary) || list[0];
   selectSource(keep ? keep.id : null);
@@ -1100,9 +1116,14 @@ function sourceOption(s) {
   b.type = 'button';
   b.dataset.id = s.id;
   b.title = s.name;
-  const shot = el('img');
-  shot.src = s.thumbnail;
-  shot.alt = '';
+  // Minimised windows have no picture, so their app's icon stands in
+  const shot = el('span', 'src-shot');
+  if (s.thumbnail || s.icon) {
+    const img = el('img', s.thumbnail ? '' : 'src-big');
+    img.src = s.thumbnail || s.icon;
+    img.alt = '';
+    shot.append(img);
+  }
   const label = el('span', 'src-label');
   if (s.icon) {
     const i = el('img', 'src-icon');
@@ -1112,7 +1133,8 @@ function sourceOption(s) {
   }
   label.append(el('span', 'src-name', s.name));
   b.append(shot, label);
-  if (s.detail) b.append(el('span', 'src-detail', s.detail));
+  const detail = s.minimised ? 'Minimised · opens back up when you share' : s.detail;
+  if (detail) b.append(el('span', 'src-detail', detail));
   b.addEventListener('click', () => selectSource(s.id));
   b.addEventListener('dblclick', () => { selectSource(s.id); $('picker').close('share'); });
   return b;
@@ -1122,6 +1144,34 @@ function selectSource(id) {
   picked = id;
   for (const b of document.querySelectorAll('.src')) b.setAttribute('aria-pressed', String(b.dataset.id === id));
   $('pickShare').disabled = !id;
+}
+
+// The app captures the sound itself (just the chosen window's app, or everything but this room)
+// and streams the raw samples here; a worklet turns them into the stream's sound track.
+let appShare = null;   // while sharing in the app: { sound: 'window' | 'others' | 'system', ctx }
+
+async function appSoundTrack() {
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  try {
+    await ctx.audioWorklet.addModule('sound-worklet.js');
+    const feed = new AudioWorkletNode(ctx, 'feed', { numberOfInputs: 0, outputChannelCount: [2] });
+    const out = ctx.createMediaStreamDestination();
+    feed.connect(out);
+    const started = await window.screenRoomApp.startSound(bytes => {
+      const samples = new Float32Array(bytes.byteLength / 4);
+      new Uint8Array(samples.buffer).set(bytes);
+      feed.port.postMessage(samples.buffer, [samples.buffer]);
+    });
+    if (!started) throw new Error('the sound helper didn’t start');
+    await ctx.resume();
+    appShare.ctx = ctx;
+    return out.stream.getAudioTracks()[0];
+  } catch (e) {
+    console.warn('Couldn’t capture sound', e);
+    window.screenRoomApp.stopSound();
+    ctx.close();
+    return null;
+  }
 }
 
 function callMember(m) {
@@ -1138,6 +1188,11 @@ function stopShare() {
   if (!localStream) return;
   localStream.getTracks().forEach(t => t.stop());
   localStream = null;
+  if (appShare && appShare.ctx) {
+    window.screenRoomApp.stopSound();
+    appShare.ctx.close();
+  }
+  appShare = null;
   for (const m of members.values()) if (m.outCall) { const c = m.outCall; m.outCall = null; c.close(); }
   broadcast({ type: 'sharing', on: false });
   $('localPreview').srcObject = null;
@@ -1391,8 +1446,9 @@ function volControls(m) {
   return { root, btn, range, pct };
 }
 
-// The app captures all system sound, so friends' streams playing here would go straight back out to them
-const echoGuard = () => inApp && !!localStream && localStream.getAudioTracks().length > 0;
+// When the app has to fall back to Windows' whole sound mix, friends' streams playing here would go
+// straight back out to them. (The app's own capture leaves this room out, so it needs no muting.)
+const echoGuard = () => inApp && !!localStream && !!appShare && appShare.sound === 'system' && localStream.getAudioTracks().length > 0;
 
 function applyAudio(m) {
   if (m.tile) {

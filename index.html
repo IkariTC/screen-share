@@ -319,6 +319,18 @@
   .chat-form input { flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--ground); font-size: 15px; }
   .chat-form .btn { flex: none; background: var(--raised); }
 
+  /* Someone asking to join: stays in the corner until you answer */
+  .knocks { position: fixed; right: 20px; bottom: 20px; z-index: 20; display: flex; flex-direction: column; gap: 10px; width: min(360px, calc(100vw - 32px)); }
+  .knocks:empty { display: none; }
+  .knock {
+    display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 18px;
+    background: var(--raised); border: 1px solid var(--amber); box-shadow: 0 0 0 6px rgba(226,165,90,.1), 0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .knock p { font-size: 15px; color: var(--muted); }
+  .knock b { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+  .knock-actions { display: flex; gap: 8px; }
+  .knock-actions .btn.primary { flex: 1; }
+
   @media (max-width: 900px) {
     .app { height: auto; min-height: 100dvh; }
     .room { grid-template-columns: minmax(0, 1fr); }
@@ -327,6 +339,7 @@
     .people-wrap { max-height: none; }
     .chat-log { flex: none; height: 40vh; }
     .popover { position: fixed; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100dvh - 24px); }
+    .knocks { left: 16px; right: 16px; bottom: 16px; width: auto; }
   }
   @media (max-width: 600px) {
     h1 { font-size: 40px; }
@@ -389,7 +402,7 @@
         </div>
         <p class="entry-msg" id="entryMsg" role="status" hidden></p>
       </form>
-      <p class="foot mono fresh-only">Sharing sound works best in Chrome or Edge on a computer.</p>
+      <p class="foot mono fresh-only" id="soundFoot">Sharing sound works best in Chrome or Edge on a computer.</p>
       <p class="foot invited-only">Not what you wanted? <button type="button" class="linkbtn" id="ownRoomBtn">Start your own room</button></p>
     </div>
   </main>
@@ -519,8 +532,13 @@
   </main>
 </div>
 
+<!-- People asking to join; shown on the start screen too -->
+<div class="knocks" id="knocks" aria-live="polite"></div>
+
 <script>
 const PREFIX = 'screenroom-v1-';          // namespaces codes on the public PeerJS server
+const SITE = 'https://ikaritc.github.io/screen-share/';
+const inApp = location.protocol === 'app:';   // the Windows app; invite links still point at the site
 const $ = id => document.getElementById(id);
 const QUALITY = {
   '720p30':  { w: 1280, h: 720,  fps: 30, kbps: 3000 },
@@ -533,8 +551,12 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
 // Everyone in the room is connected directly to everyone else. Each member:
-// { code, name, joined, conn, initiator, outCall, inCall, sharing, volume, muted, tile, row, tileVol, rowVol, last }
+// { code, name, joined, conn, initiator, outCall, inCall, sharing, volume, muted, tile, row, tileVol, rowVol, last,
+//   admitted, knock, waitingHello }
 const members = new Map();
+// Codes that someone already in the room introduced. They connect without asking;
+// anyone else who dials your code waits until you let them in.
+const vouched = new Set();
 let peer, myCode, localStream, manualTarget = null;
 let layout = 'spotlight', spotCode = null, audioBlocked = false;
 let ready = false, inRoom = false, pendingJoin = null, joinTimer = null;
@@ -598,7 +620,8 @@ function displayName() {
   return $('nameInput').value.trim().slice(0, 24) || 'Guest ' + (myCode || '').slice(0, 3);
 }
 
-const inviteUrl = () => location.origin + location.pathname + '?join=' + myCode;
+const siteBase = () => inApp ? SITE : location.origin + location.pathname.replace(/index\.html$/, '');
+const inviteUrl = () => siteBase() + '?join=' + myCode;
 
 /* ---------- Start screen ---------- */
 function setEntryMode(mode) {
@@ -633,7 +656,7 @@ function startPeer() {
   peer.on('open', () => {
     ready = true;
     $('myCode').textContent = myCode;
-    $('inviteLink').textContent = (location.host + location.pathname).replace(/index\.html$/, '') + '?join=' + myCode;
+    $('inviteLink').textContent = inviteUrl().replace(/^https?:\/\//, '');
     $('nameInput').placeholder = 'Guest ' + myCode.slice(0, 3);
     sizeName();
     renderMe();
@@ -707,18 +730,37 @@ function attachConn(c, initiator) {
   }
   m.conn = c;
   m.initiator = initiator;
+  // You dialled them, or someone in the room introduced them: no need to ask
+  if (initiator === myCode || vouched.has(code)) m.admitted = true;
   c.on('open', () => {
     if (m.conn !== c) return;
-    const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
-    c.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others });
+    if (manualTarget === code) {
+      clearTimeout(joinTimer);
+      setEntryMsg('Connected. Waiting for them to let you in…');
+    }
+    if (m.admitted) sendHello(m);
   });
   c.on('data', msg => { if (m.conn === c) onMessage(m, msg); });
   c.on('close', () => { if (m.conn === c) removeMember(m, true); });
   c.on('error', e => console.warn('Data connection error', e));
 }
 
+function sendHello(m) {
+  const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
+  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others });
+}
+
 function onMessage(m, msg) {
   if (!msg || typeof msg !== 'object') return;
+  if (!m.admitted) {
+    // Not let in yet: their hello only puts a name on the question, and nothing else counts
+    if (msg.type === 'hello') {
+      m.waitingHello = msg;
+      setName(m, msg.name);
+      showKnock(m);
+    }
+    return;
+  }
   switch (msg.type) {
     case 'hello': {
       const first = !m.joined;
@@ -762,16 +804,78 @@ function onMessage(m, msg) {
     case 'bye':
       removeMember(m, true);
       break;
+    case 'denied':
+      if (manualTarget === m.code) {
+        manualTarget = null;
+        clearTimeout(joinTimer);
+        setEntryMsg('They didn’t let you in. Ask them, then try again.', 'bad');
+      }
+      removeMember(m, false);
+      break;
   }
 }
 
 // Connect to room members we've just heard about. Only the smaller code dials, so each pair links once.
+// Being introduced by someone already here also counts as being let in.
 function meet(peers) {
   if (!Array.isArray(peers)) return;
   for (const code of peers) {
-    if (typeof code !== 'string' || code === myCode || members.has(code)) continue;
+    if (typeof code !== 'string' || code === myCode) continue;
+    vouched.add(code);
+    const m = members.get(code);
+    if (m && !m.admitted) letIn(m);
+    if (m) continue;
     if (myCode < code) connectTo(code);
   }
+}
+
+/* ---------- Asking to join ---------- */
+function showKnock(m) {
+  if (m.knock) { m.knock.name.textContent = m.name; return; }
+  const card = el('div', 'knock');
+  const name = el('b', '', m.name);
+  const text = el('p');
+  text.append(name, ' wants to join the room.');
+  const yes = el('button', 'btn primary', 'Let them in');
+  const no = el('button', 'btn ghost', 'Not now');
+  yes.type = no.type = 'button';
+  yes.addEventListener('click', () => letIn(m));
+  no.addEventListener('click', () => turnAway(m));
+  const actions = el('div', 'knock-actions');
+  actions.append(yes, no);
+  card.append(text, actions);
+  $('knocks').append(card);
+  m.knock = { el: card, name };
+  updateTitle();
+}
+
+function removeKnock(m) {
+  if (!m.knock) return;
+  m.knock.el.remove();
+  m.knock = null;
+  updateTitle();
+}
+
+// "(1) Screen Room" in the tab while someone is waiting
+function updateTitle() {
+  const n = $('knocks').children.length;
+  document.title = (n ? '(' + n + ') ' : '') + 'Screen Room';
+}
+
+function letIn(m) {
+  removeKnock(m);
+  m.admitted = true;
+  if (!(m.conn && m.conn.open)) return;            // hello goes out once the connection opens
+  sendHello(m);
+  const hello = m.waitingHello;
+  m.waitingHello = null;
+  if (hello) onMessage(m, hello);
+}
+
+function turnAway(m) {
+  removeKnock(m);
+  if (m.conn && m.conn.open) m.conn.send({ type: 'denied' });
+  setTimeout(() => removeMember(m, false), 500);   // give the answer time to arrive before hanging up
 }
 
 function setName(m, name) {
@@ -794,6 +898,7 @@ function removeMember(m, announce) {
   if (m.inCall) m.inCall.close();
   m.outCall = m.inCall = null;
   removeTile(m);
+  removeKnock(m);
   if (m.row) m.row.remove();
   if (announce && m.joined) addSystem(m.name + ' left');
   updateRoomStatus();
@@ -806,6 +911,7 @@ function broadcast(msg) {
 function leaveRoom() {
   broadcast({ type: 'bye' });
   for (const m of [...members.values()]) removeMember(m, false);
+  vouched.clear();
   stopShare();
   toggleSettings(false);
   manualTarget = null;
@@ -861,6 +967,7 @@ async function startShare() {
   $('localPreview').srcObject = localStream;
   $('miniPreview').srcObject = localStream;
   describeAudio(vt);
+  for (const m of members.values()) applyAudio(m);  // the app mutes friends' streams while it shares sound
   document.body.classList.add('sharing');
   for (const m of joinedMembers()) callMember(m);
   broadcast({ type: 'sharing', on: true });
@@ -873,7 +980,9 @@ function describeAudio(vt) {
   const surface = vt.getSettings().displaySurface;
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
-    note.textContent = surface === 'monitor'
+    note.textContent = inApp
+      ? 'Sharing your main screen and all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.'
+      : surface === 'monitor'
       ? 'Sharing all sound from your computer, including voice chat and notifications.'
       : 'Sound is being shared.';
     return;
@@ -911,6 +1020,7 @@ function stopShare() {
   $('localPreview').srcObject = null;
   $('miniPreview').srcObject = null;
   $('audioNote').textContent = '';
+  for (const m of members.values()) applyAudio(m);
   $('statsOut').replaceChildren();
   $('statsEmpty').hidden = false;
   $('settingsBtn').classList.remove('alert');
@@ -960,7 +1070,8 @@ function preferCodec(sdp) {
 
 /* ---------- Receiving ---------- */
 function onCall(call) {
-  const m = getMember(codeOf(call.peer));
+  const m = members.get(codeOf(call.peer));
+  if (!m || !m.admitted) { call.close(); return; }  // only people you've let in can put a screen up
   const old = m.inCall;
   m.inCall = call;
   if (old) old.close();
@@ -1157,10 +1268,13 @@ function volControls(m) {
   return { root, btn, range, pct };
 }
 
+// The app captures all system sound, so friends' streams playing here would go straight back out to them
+const echoGuard = () => inApp && !!localStream && localStream.getAudioTracks().length > 0;
+
 function applyAudio(m) {
   if (m.tile) {
     m.tile.video.volume = m.volume / 100;
-    m.tile.video.muted = m.muted || audioBlocked;
+    m.tile.video.muted = m.muted || audioBlocked || echoGuard();
   }
   for (const ui of [m.tileVol, m.rowVol]) {
     if (!ui) continue;
@@ -1407,6 +1521,8 @@ for (const r of document.querySelectorAll('input[name="codec"]')) {
 }
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
+
+if (inApp) $('soundFoot').textContent = 'Sharing shows your main screen, with all your computer’s sound.';
 
 if (!canShare) {
   $('shareBtn').disabled = true;

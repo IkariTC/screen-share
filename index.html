@@ -255,12 +255,13 @@
   body.sharing.watching #miniPreview { display: block; }
 
   .settings { position: relative; }
-  #settingsBtn { position: relative; width: 48px; height: 48px; background: var(--raised); }
-  #settingsBtn .ic { width: 20px; height: 20px; }
-  #settingsBtn[aria-expanded="true"] { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); }
+  .settings > .btn { position: relative; width: 48px; height: 48px; background: var(--raised); }
+  .settings > .btn .ic { width: 20px; height: 20px; }
+  .settings > .btn[aria-expanded="true"] { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); }
+  #roomBtn.locked { color: var(--amber); }
   #settingsBtn.alert::after { content: ""; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--rust); }
   .popover {
-    position: absolute; right: 0; bottom: calc(100% + 22px); width: min(380px, calc(100vw - 66px));
+    position: absolute; z-index: 10; right: 0; bottom: calc(100% + 22px); width: min(380px, calc(100vw - 66px));
     max-height: calc(100dvh - 150px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 20px;
     border-radius: 18px; background: var(--raised); border: 1px solid var(--line-strong); box-shadow: 0 30px 70px -20px rgba(0,0,0,.8);
   }
@@ -396,6 +397,8 @@
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.75-1.4"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
   </defs>
 </svg>
@@ -460,7 +463,7 @@
         <div class="pane pane-invite">
           <div class="pane-col">
             <div class="stack">
-              <p class="eyebrow">Your room is open</p>
+              <p class="eyebrow" id="roomEyebrow">Your room is open</p>
               <h1>Send a friend the link.</h1>
             </div>
             <div class="linkrow">
@@ -499,6 +502,23 @@
         <p class="dock-note" id="dockHint">You can start sharing before anyone arrives.</p>
         <p class="dock-note" id="audioNote" role="status"></p>
         <video id="miniPreview" autoplay muted playsinline aria-label="Preview of your screen"></video>
+        <div class="settings">
+          <button class="btn icon" type="button" id="roomBtn" aria-label="Room settings" title="Room settings" aria-expanded="false" aria-controls="roomPanel"><svg class="ic" aria-hidden="true"><use href="#i-unlock"/></svg></button>
+          <div class="popover" id="roomPanel" hidden>
+            <div class="pop-head">
+              <h2>Room settings</h2>
+              <button class="btn ghost icon" type="button" id="roomClose" aria-label="Close room settings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+            <fieldset>
+              <legend>Who can come in</legend>
+              <div class="optgrid cols-2">
+                <label class="opt"><input type="radio" name="entry" value="open" checked><span class="box two"><b>Open</b><small>anyone with the link</small></span></label>
+                <label class="opt"><input type="radio" name="entry" value="locked"><span class="box two"><b>Locked</b><small>you let people in</small></span></label>
+              </div>
+            </fieldset>
+            <p class="hint small">Everyone in the room shares this. While it’s locked, whoever’s link or code a newcomer used decides whether they come in.</p>
+          </div>
+        </div>
         <div class="settings">
           <button class="btn icon" type="button" id="settingsBtn" aria-label="Stream settings" aria-expanded="false" aria-controls="settingsPanel"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></button>
           <div class="popover" id="settingsPanel" hidden>
@@ -618,6 +638,9 @@ const members = new Map();
 // Codes that someone already in the room introduced. They connect without asking;
 // anyone else who dials your code waits until you let them in.
 const vouched = new Set();
+// Rooms start open: anyone who dials your code comes straight in. A locked room asks first.
+// The setting is shared by the whole room, and a newcomer takes on the room's.
+let locked = false;
 let peer, myCode, localStream, manualTarget = null;
 let layout = 'spotlight', spotCode = null, audioBlocked = false;
 let ready = false, inRoom = false, pendingJoin = null, joinTimer = null;
@@ -791,13 +814,13 @@ function attachConn(c, initiator) {
   }
   m.conn = c;
   m.initiator = initiator;
-  // You dialled them, or someone in the room introduced them: no need to ask
-  if (initiator === myCode || vouched.has(code)) m.admitted = true;
+  // The room is open, you dialled them, or someone in the room introduced them: no need to ask
+  if (!locked || initiator === myCode || vouched.has(code)) m.admitted = true;
   c.on('open', () => {
     if (m.conn !== c) return;
     if (manualTarget === code) {
       clearTimeout(joinTimer);
-      setEntryMsg('Connected. Waiting for them to let you in…');
+      setEntryMsg('Connected. Joining…');
     }
     if (m.admitted) sendHello(m);
   });
@@ -808,7 +831,7 @@ function attachConn(c, initiator) {
 
 function sendHello(m) {
   const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
-  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others });
+  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others, locked });
 }
 
 function onMessage(m, msg) {
@@ -816,9 +839,11 @@ function onMessage(m, msg) {
   if (!m.admitted) {
     // Not let in yet: their hello only puts a name on the question, and nothing else counts
     if (msg.type === 'hello') {
+      const asked = !!m.knock;
       m.waitingHello = msg;
       setName(m, msg.name);
       showKnock(m);
+      if (!asked) m.conn.send({ type: 'waiting' });
     }
     return;
   }
@@ -829,6 +854,8 @@ function onMessage(m, msg) {
       setName(m, msg.name);
       m.sharing = !!msg.sharing;
       if (first) {
+        // Joining someone's room: take on whether it's locked
+        if (manualTarget === m.code && typeof msg.locked === 'boolean') setLocked(msg.locked);
         addSystem(m.name + ' joined');
         // Introduce the newcomer to everyone else here
         for (const x of joinedMembers()) {
@@ -865,6 +892,12 @@ function onMessage(m, msg) {
     case 'bye':
       removeMember(m, true);
       break;
+    case 'lock':
+      setLocked(msg.on, m.name);
+      break;
+    case 'waiting':
+      if (manualTarget === m.code) setEntryMsg('Connected. Waiting for them to let you in…');
+      break;
     case 'denied':
       if (manualTarget === m.code) {
         manualTarget = null;
@@ -891,6 +924,21 @@ function meet(peers) {
 }
 
 /* ---------- Asking to join ---------- */
+// who: 'You' when you changed it, a member's name when they did, nothing to change it quietly
+function setLocked(on, who) {
+  on = !!on;
+  document.querySelector('input[name="entry"][value="' + (on ? 'locked' : 'open') + '"]').checked = true;
+  $('roomBtn').classList.toggle('locked', on);
+  $('roomBtn').querySelector('use').setAttribute('href', on ? '#i-lock' : '#i-unlock');
+  $('roomEyebrow').textContent = on ? 'Your room is locked' : 'Your room is open';
+  if (on === locked) return;
+  locked = on;
+  if (who) addSystem(who + (on ? ' locked the room' : ' unlocked the room'));
+  if (who === 'You') broadcast({ type: 'lock', on });
+  // Unlocking lets in anyone still waiting
+  if (!on) for (const m of [...members.values()]) if (!m.admitted) letIn(m);
+}
+
 function showKnock(m) {
   if (m.knock) { m.knock.name.textContent = m.name; return; }
   const card = el('div', 'knock');
@@ -973,8 +1021,9 @@ function leaveRoom() {
   broadcast({ type: 'bye' });
   for (const m of [...members.values()]) removeMember(m, false);
   vouched.clear();
+  setLocked(false);
   stopShare();
-  toggleSettings(false);
+  closeMenus();
   manualTarget = null;
   inRoom = false;
   document.body.classList.remove('in-room');
@@ -1663,21 +1712,34 @@ $('unmute').addEventListener('click', unblockAudio);
 document.addEventListener('pointerdown', unblockAudio);
 document.addEventListener('keydown', unblockAudio);
 
-// Stream settings live in one menu
-function toggleSettings(open) {
-  const p = $('settingsPanel');
-  const show = open === undefined ? p.hidden : open;
-  p.hidden = !show;
-  $('settingsBtn').setAttribute('aria-expanded', String(show));
+// Room and stream settings each live in a menu; one is open at a time
+const MENUS = [['roomBtn', 'roomPanel', 'roomClose'], ['settingsBtn', 'settingsPanel', 'settingsClose']];
+function toggleMenu(btn, panel, open) {
+  const show = open === undefined ? $(panel).hidden : open;
+  if (show) closeMenus();
+  $(panel).hidden = !show;
+  $(btn).setAttribute('aria-expanded', String(show));
 }
-$('settingsBtn').addEventListener('click', () => toggleSettings());
-$('settingsClose').addEventListener('click', () => { toggleSettings(false); $('settingsBtn').focus(); });
+function closeMenus() {
+  for (const [btn, panel] of MENUS) toggleMenu(btn, panel, false);
+}
+for (const [btn, panel, close] of MENUS) {
+  $(btn).addEventListener('click', () => toggleMenu(btn, panel));
+  $(close).addEventListener('click', () => { toggleMenu(btn, panel, false); $(btn).focus(); });
+}
 document.addEventListener('pointerdown', e => {
-  if (!$('settingsPanel').hidden && !e.target.closest('.settings')) toggleSettings(false);
+  for (const [btn, panel] of MENUS) {
+    if (!$(panel).hidden && !$(panel).parentNode.contains(e.target)) toggleMenu(btn, panel, false);
+  }
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('settingsPanel').hidden) { toggleSettings(false); $('settingsBtn').focus(); }
+  if (e.key !== 'Escape') return;
+  for (const [btn, panel] of MENUS) if (!$(panel).hidden) { toggleMenu(btn, panel, false); $(btn).focus(); }
 });
+
+for (const r of document.querySelectorAll('input[name="entry"]')) {
+  r.addEventListener('change', () => setLocked(setting('entry') === 'locked', 'You'));
+}
 
 for (const r of document.querySelectorAll('input[name="quality"]')) {
   r.addEventListener('change', () => {

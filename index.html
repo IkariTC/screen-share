@@ -268,7 +268,7 @@
   .pop-head h2 { font-size: 17px; font-weight: 600; }
   .pop-head .btn { width: 40px; height: 40px; margin-right: -8px; }
   fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-  legend, .now h3, .side h2 { padding: 0; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  legend, .now h3, .side h2, .picker-body h3 { padding: 0; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   legend { margin-bottom: 8px; }
   .optgrid { display: grid; gap: 8px; }
   .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -319,6 +319,47 @@
   .chat-form input { flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--ground); font-size: 15px; }
   .chat-form .btn { flex: none; background: var(--raised); }
 
+  /* Someone asking to join: stays in the corner until you answer */
+  .knocks { position: fixed; right: 20px; bottom: 20px; z-index: 20; display: flex; flex-direction: column; gap: 10px; width: min(360px, calc(100vw - 32px)); }
+  .knocks:empty { display: none; }
+  .knock {
+    display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 18px;
+    background: var(--raised); border: 1px solid var(--amber); box-shadow: 0 0 0 6px rgba(226,165,90,.1), 0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .knock p { font-size: 15px; color: var(--muted); }
+  .knock b { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+  .knock-actions { display: flex; gap: 8px; }
+  .knock-actions .btn.primary { flex: 1; }
+
+  /* The app's own picker for screens and windows */
+  .picker {
+    width: min(920px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border-radius: 20px;
+    border: 1px solid var(--line-strong); background: var(--raised); color: var(--text); box-shadow: 0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .picker::backdrop { background: rgba(8,6,5,.72); }
+  .picker-box { display: flex; flex-direction: column; max-height: calc(100dvh - 50px); }
+  .picker .pop-head { padding: 20px 20px 12px; }
+  .pop-tools { display: flex; gap: 4px; margin-right: -8px; }
+  .picker .pop-head .btn { margin-right: 0; }
+  .picker-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 4px 20px 20px; }
+  .srcgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 10px; }
+  .src {
+    display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border-radius: 14px;
+    border: 1px solid var(--line-strong); background: var(--surface); text-align: left; transition: border-color .15s, background .15s;
+  }
+  .src:hover { border-color: var(--muted); }
+  .src[aria-pressed="true"] { border-color: var(--amber); background: rgba(226,165,90,.14); box-shadow: 0 0 0 3px rgba(226,165,90,.18); }
+  .src-shot { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--stage); overflow: hidden; }
+  .src-shot img { width: 100%; height: 100%; object-fit: contain; }
+  .src-shot img.src-big { width: 48px; height: 48px; opacity: .85; }
+  .src-label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
+  .src-icon { width: 16px; height: 16px; flex: none; }
+  .src-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .src-detail { font: 12.5px var(--mono); color: var(--muted); }
+  .picker-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line-strong); }
+  .picker-foot .hint { flex: 1 1 240px; }
+  .picker-actions { margin-left: auto; display: flex; gap: 10px; }
+
   @media (max-width: 900px) {
     .app { height: auto; min-height: 100dvh; }
     .room { grid-template-columns: minmax(0, 1fr); }
@@ -327,6 +368,7 @@
     .people-wrap { max-height: none; }
     .chat-log { flex: none; height: 40vh; }
     .popover { position: fixed; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100dvh - 24px); }
+    .knocks { left: 16px; right: 16px; bottom: 16px; width: auto; }
   }
   @media (max-width: 600px) {
     h1 { font-size: 40px; }
@@ -354,6 +396,7 @@
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
   </defs>
 </svg>
 
@@ -389,7 +432,7 @@
         </div>
         <p class="entry-msg" id="entryMsg" role="status" hidden></p>
       </form>
-      <p class="foot mono fresh-only">Sharing sound works best in Chrome or Edge on a computer.</p>
+      <p class="foot mono fresh-only" id="soundFoot">Sharing sound works best in Chrome or Edge on a computer.</p>
       <p class="foot invited-only">Not what you wanted? <button type="button" class="linkbtn" id="ownRoomBtn">Start your own room</button></p>
     </div>
   </main>
@@ -519,8 +562,44 @@
   </main>
 </div>
 
+<!-- People asking to join; shown on the start screen too -->
+<div class="knocks" id="knocks" aria-live="polite"></div>
+
+<!-- The Windows app's picker: which screen or window to share -->
+<dialog class="picker" id="picker" aria-labelledby="pickerTitle">
+  <form method="dialog" class="picker-box">
+    <div class="pop-head">
+      <h2 id="pickerTitle">Choose what to share</h2>
+      <div class="pop-tools">
+        <button class="btn ghost icon" type="button" id="pickRefresh" aria-label="Refresh the list" title="Refresh the list"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+        <button class="btn ghost icon" value="cancel" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+    </div>
+    <div class="picker-body">
+      <section>
+        <h3>Screens</h3>
+        <div class="srcgrid" id="screenList"></div>
+      </section>
+      <section>
+        <h3>Windows</h3>
+        <div class="srcgrid" id="windowList"></div>
+        <p class="hint small" id="windowEmpty" hidden>No open windows to share. Minimised windows don’t show up.</p>
+      </section>
+    </div>
+    <div class="picker-foot">
+      <p class="hint small" id="pickSound">All sound from your computer is shared, whichever you pick.</p>
+      <div class="picker-actions">
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn primary" value="share" id="pickShare" disabled>Share</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
 <script>
 const PREFIX = 'screenroom-v1-';          // namespaces codes on the public PeerJS server
+const SITE = 'https://ikaritc.github.io/screen-share/';
+const inApp = location.protocol === 'app:';   // the Windows app; invite links still point at the site
 const $ = id => document.getElementById(id);
 const QUALITY = {
   '720p30':  { w: 1280, h: 720,  fps: 30, kbps: 3000 },
@@ -533,8 +612,12 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
 // Everyone in the room is connected directly to everyone else. Each member:
-// { code, name, joined, conn, initiator, outCall, inCall, sharing, volume, muted, tile, row, tileVol, rowVol, last }
+// { code, name, joined, conn, initiator, outCall, inCall, sharing, volume, muted, tile, row, tileVol, rowVol, last,
+//   admitted, knock, waitingHello }
 const members = new Map();
+// Codes that someone already in the room introduced. They connect without asking;
+// anyone else who dials your code waits until you let them in.
+const vouched = new Set();
 let peer, myCode, localStream, manualTarget = null;
 let layout = 'spotlight', spotCode = null, audioBlocked = false;
 let ready = false, inRoom = false, pendingJoin = null, joinTimer = null;
@@ -598,7 +681,8 @@ function displayName() {
   return $('nameInput').value.trim().slice(0, 24) || 'Guest ' + (myCode || '').slice(0, 3);
 }
 
-const inviteUrl = () => location.origin + location.pathname + '?join=' + myCode;
+const siteBase = () => inApp ? SITE : location.origin + location.pathname.replace(/index\.html$/, '');
+const inviteUrl = () => siteBase() + '?join=' + myCode;
 
 /* ---------- Start screen ---------- */
 function setEntryMode(mode) {
@@ -633,7 +717,7 @@ function startPeer() {
   peer.on('open', () => {
     ready = true;
     $('myCode').textContent = myCode;
-    $('inviteLink').textContent = (location.host + location.pathname).replace(/index\.html$/, '') + '?join=' + myCode;
+    $('inviteLink').textContent = inviteUrl().replace(/^https?:\/\//, '');
     $('nameInput').placeholder = 'Guest ' + myCode.slice(0, 3);
     sizeName();
     renderMe();
@@ -707,18 +791,37 @@ function attachConn(c, initiator) {
   }
   m.conn = c;
   m.initiator = initiator;
+  // You dialled them, or someone in the room introduced them: no need to ask
+  if (initiator === myCode || vouched.has(code)) m.admitted = true;
   c.on('open', () => {
     if (m.conn !== c) return;
-    const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
-    c.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others });
+    if (manualTarget === code) {
+      clearTimeout(joinTimer);
+      setEntryMsg('Connected. Waiting for them to let you in…');
+    }
+    if (m.admitted) sendHello(m);
   });
   c.on('data', msg => { if (m.conn === c) onMessage(m, msg); });
   c.on('close', () => { if (m.conn === c) removeMember(m, true); });
   c.on('error', e => console.warn('Data connection error', e));
 }
 
+function sendHello(m) {
+  const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
+  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others });
+}
+
 function onMessage(m, msg) {
   if (!msg || typeof msg !== 'object') return;
+  if (!m.admitted) {
+    // Not let in yet: their hello only puts a name on the question, and nothing else counts
+    if (msg.type === 'hello') {
+      m.waitingHello = msg;
+      setName(m, msg.name);
+      showKnock(m);
+    }
+    return;
+  }
   switch (msg.type) {
     case 'hello': {
       const first = !m.joined;
@@ -762,16 +865,78 @@ function onMessage(m, msg) {
     case 'bye':
       removeMember(m, true);
       break;
+    case 'denied':
+      if (manualTarget === m.code) {
+        manualTarget = null;
+        clearTimeout(joinTimer);
+        setEntryMsg('They didn’t let you in. Ask them, then try again.', 'bad');
+      }
+      removeMember(m, false);
+      break;
   }
 }
 
 // Connect to room members we've just heard about. Only the smaller code dials, so each pair links once.
+// Being introduced by someone already here also counts as being let in.
 function meet(peers) {
   if (!Array.isArray(peers)) return;
   for (const code of peers) {
-    if (typeof code !== 'string' || code === myCode || members.has(code)) continue;
+    if (typeof code !== 'string' || code === myCode) continue;
+    vouched.add(code);
+    const m = members.get(code);
+    if (m && !m.admitted) letIn(m);
+    if (m) continue;
     if (myCode < code) connectTo(code);
   }
+}
+
+/* ---------- Asking to join ---------- */
+function showKnock(m) {
+  if (m.knock) { m.knock.name.textContent = m.name; return; }
+  const card = el('div', 'knock');
+  const name = el('b', '', m.name);
+  const text = el('p');
+  text.append(name, ' wants to join the room.');
+  const yes = el('button', 'btn primary', 'Let them in');
+  const no = el('button', 'btn ghost', 'Not now');
+  yes.type = no.type = 'button';
+  yes.addEventListener('click', () => letIn(m));
+  no.addEventListener('click', () => turnAway(m));
+  const actions = el('div', 'knock-actions');
+  actions.append(yes, no);
+  card.append(text, actions);
+  $('knocks').append(card);
+  m.knock = { el: card, name };
+  updateTitle();
+}
+
+function removeKnock(m) {
+  if (!m.knock) return;
+  m.knock.el.remove();
+  m.knock = null;
+  updateTitle();
+}
+
+// "(1) Screen Room" in the tab while someone is waiting
+function updateTitle() {
+  const n = $('knocks').children.length;
+  document.title = (n ? '(' + n + ') ' : '') + 'Screen Room';
+}
+
+function letIn(m) {
+  removeKnock(m);
+  m.admitted = true;
+  if (!(m.conn && m.conn.open)) return;            // hello goes out once the connection opens
+  sendHello(m);
+  const hello = m.waitingHello;
+  m.waitingHello = null;
+  if (hello) onMessage(m, hello);
+}
+
+function turnAway(m) {
+  removeKnock(m);
+  if (m.conn && m.conn.open) m.conn.send({ type: 'denied' });
+  setTimeout(() => removeMember(m, false), 500);   // give the answer time to arrive before hanging up
 }
 
 function setName(m, name) {
@@ -794,6 +959,7 @@ function removeMember(m, announce) {
   if (m.inCall) m.inCall.close();
   m.outCall = m.inCall = null;
   removeTile(m);
+  removeKnock(m);
   if (m.row) m.row.remove();
   if (announce && m.joined) addSystem(m.name + ' left');
   updateRoomStatus();
@@ -806,6 +972,7 @@ function broadcast(msg) {
 function leaveRoom() {
   broadcast({ type: 'bye' });
   for (const m of [...members.values()]) removeMember(m, false);
+  vouched.clear();
   stopShare();
   toggleSettings(false);
   manualTarget = null;
@@ -842,6 +1009,13 @@ function updateDock() {
 /* ---------- Sending your screen ---------- */
 async function startShare() {
   const q = QUALITY[setting('quality')];
+  if (inApp) {
+    const id = await pickSource();
+    if (!id) return;
+    const plan = await window.screenRoomApp.choose(id);
+    if (!plan) { setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad'); return; }
+    appShare = { sound: plan.sound, ctx: null };
+  }
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
@@ -853,7 +1027,13 @@ async function startShare() {
     });
   } catch (e) {
     if (e.name !== 'NotAllowedError') setStatus('Couldn’t start sharing: ' + e.message, 'bad');
+    else if (inApp) setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad');
+    appShare = null;
     return;
+  }
+  if (appShare && appShare.sound !== 'system') {
+    const track = await appSoundTrack();
+    if (track) localStream.addTrack(track);
   }
   const vt = localStream.getVideoTracks()[0];
   vt.contentHint = setting('mode');
@@ -861,6 +1041,7 @@ async function startShare() {
   $('localPreview').srcObject = localStream;
   $('miniPreview').srcObject = localStream;
   describeAudio(vt);
+  for (const m of members.values()) applyAudio(m);  // see echoGuard
   document.body.classList.add('sharing');
   for (const m of joinedMembers()) callMember(m);
   broadcast({ type: 'sharing', on: true });
@@ -871,15 +1052,20 @@ async function startShare() {
 function describeAudio(vt) {
   const note = $('audioNote');
   const surface = vt.getSettings().displaySurface;
+  const what = '“' + vt.label + '”';
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
-    note.textContent = surface === 'monitor'
-      ? 'Sharing all sound from your computer, including voice chat and notifications.'
-      : 'Sound is being shared.';
+    note.textContent = !inApp
+      ? (surface === 'monitor' ? 'Sharing all sound from your computer, including voice chat and notifications.' : 'Sound is being shared.')
+      : appShare.sound === 'window' ? 'Sharing ' + what + ' with only its own sound.'
+      : appShare.sound === 'others' ? 'Sharing ' + what + ' with all sound from your computer, except this room’s.'
+      : 'Sharing ' + what + ' with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.';
     return;
   }
   note.className = 'dock-note warn';
-  if (navigator.userAgent.includes('Firefox')) {
+  if (inApp) {
+    note.textContent = 'No sound: the app couldn’t pick up sound for ' + what + '. Stop and share again to retry.';
+  } else if (navigator.userAgent.includes('Firefox')) {
     note.textContent = 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.';
   } else if (surface === 'window') {
     note.textContent = 'No sound: this browser can’t share sound from a single window. Stop, then share your Entire screen with “Share system audio” ticked.';
@@ -889,6 +1075,102 @@ function describeAudio(vt) {
     note.textContent = 'No sound: “Share tab audio” wasn’t ticked. Stop and share again with it ticked.';
   } else {
     note.textContent = 'No sound is being shared.';
+  }
+}
+
+/* ---------- The app's picker ---------- */
+// The Windows app has no built-in picker, so it lists screens and windows here.
+// Resolves with the chosen source's id, or null if the picker was closed.
+let picked = null;
+
+function pickSource() {
+  const d = $('picker');
+  selectSource(null);
+  d.returnValue = '';
+  d.showModal();
+  loadSources().then(() => {
+    const current = document.querySelector('.src[aria-pressed="true"]');
+    if (d.open && current) current.focus();
+  });
+  return new Promise(resolve => {
+    d.addEventListener('close', () => resolve(d.returnValue === 'share' ? picked : null), { once: true });
+  });
+}
+
+async function loadSources() {
+  let list = [], split = false;
+  try { ({ sources: list, split } = await window.screenRoomApp.sources()); } catch (e) { console.warn('Listing screens failed', e); }
+  $('screenList').replaceChildren(...list.filter(s => s.kind === 'screen').map(sourceOption));
+  $('windowList').replaceChildren(...list.filter(s => s.kind === 'window').map(sourceOption));
+  $('windowEmpty').hidden = list.some(s => s.kind === 'window');
+  $('pickSound').textContent = split
+    ? 'A window shares only its own sound. A screen shares all sound except this room’s.'
+    : 'All sound from your computer is shared, whichever you pick.';
+  // Keep the choice across a refresh; otherwise start on the main screen
+  const keep = list.find(s => s.id === picked) || list.find(s => s.primary) || list[0];
+  selectSource(keep ? keep.id : null);
+}
+
+function sourceOption(s) {
+  const b = el('button', 'src');
+  b.type = 'button';
+  b.dataset.id = s.id;
+  b.title = s.name;
+  // Minimised windows have no picture, so their app's icon stands in
+  const shot = el('span', 'src-shot');
+  if (s.thumbnail || s.icon) {
+    const img = el('img', s.thumbnail ? '' : 'src-big');
+    img.src = s.thumbnail || s.icon;
+    img.alt = '';
+    shot.append(img);
+  }
+  const label = el('span', 'src-label');
+  if (s.icon) {
+    const i = el('img', 'src-icon');
+    i.src = s.icon;
+    i.alt = '';
+    label.append(i);
+  }
+  label.append(el('span', 'src-name', s.name));
+  b.append(shot, label);
+  const detail = s.minimised ? 'Minimised · opens back up when you share' : s.detail;
+  if (detail) b.append(el('span', 'src-detail', detail));
+  b.addEventListener('click', () => selectSource(s.id));
+  b.addEventListener('dblclick', () => { selectSource(s.id); $('picker').close('share'); });
+  return b;
+}
+
+function selectSource(id) {
+  picked = id;
+  for (const b of document.querySelectorAll('.src')) b.setAttribute('aria-pressed', String(b.dataset.id === id));
+  $('pickShare').disabled = !id;
+}
+
+// The app captures the sound itself (just the chosen window's app, or everything but this room)
+// and streams the raw samples here; a worklet turns them into the stream's sound track.
+let appShare = null;   // while sharing in the app: { sound: 'window' | 'others' | 'system', ctx }
+
+async function appSoundTrack() {
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  try {
+    await ctx.audioWorklet.addModule('sound-worklet.js');
+    const feed = new AudioWorkletNode(ctx, 'feed', { numberOfInputs: 0, outputChannelCount: [2] });
+    const out = ctx.createMediaStreamDestination();
+    feed.connect(out);
+    const started = await window.screenRoomApp.startSound(bytes => {
+      const samples = new Float32Array(bytes.byteLength / 4);
+      new Uint8Array(samples.buffer).set(bytes);
+      feed.port.postMessage(samples.buffer, [samples.buffer]);
+    });
+    if (!started) throw new Error('the sound helper didn’t start');
+    await ctx.resume();
+    appShare.ctx = ctx;
+    return out.stream.getAudioTracks()[0];
+  } catch (e) {
+    console.warn('Couldn’t capture sound', e);
+    window.screenRoomApp.stopSound();
+    ctx.close();
+    return null;
   }
 }
 
@@ -906,11 +1188,17 @@ function stopShare() {
   if (!localStream) return;
   localStream.getTracks().forEach(t => t.stop());
   localStream = null;
+  if (appShare && appShare.ctx) {
+    window.screenRoomApp.stopSound();
+    appShare.ctx.close();
+  }
+  appShare = null;
   for (const m of members.values()) if (m.outCall) { const c = m.outCall; m.outCall = null; c.close(); }
   broadcast({ type: 'sharing', on: false });
   $('localPreview').srcObject = null;
   $('miniPreview').srcObject = null;
   $('audioNote').textContent = '';
+  for (const m of members.values()) applyAudio(m);
   $('statsOut').replaceChildren();
   $('statsEmpty').hidden = false;
   $('settingsBtn').classList.remove('alert');
@@ -960,7 +1248,8 @@ function preferCodec(sdp) {
 
 /* ---------- Receiving ---------- */
 function onCall(call) {
-  const m = getMember(codeOf(call.peer));
+  const m = members.get(codeOf(call.peer));
+  if (!m || !m.admitted) { call.close(); return; }  // only people you've let in can put a screen up
   const old = m.inCall;
   m.inCall = call;
   if (old) old.close();
@@ -1157,10 +1446,14 @@ function volControls(m) {
   return { root, btn, range, pct };
 }
 
+// When the app has to fall back to Windows' whole sound mix, friends' streams playing here would go
+// straight back out to them. (The app's own capture leaves this room out, so it needs no muting.)
+const echoGuard = () => inApp && !!localStream && !!appShare && appShare.sound === 'system' && localStream.getAudioTracks().length > 0;
+
 function applyAudio(m) {
   if (m.tile) {
     m.tile.video.volume = m.volume / 100;
-    m.tile.video.muted = m.muted || audioBlocked;
+    m.tile.video.muted = m.muted || audioBlocked || echoGuard();
   }
   for (const ui of [m.tileVol, m.rowVol]) {
     if (!ui) continue;
@@ -1222,7 +1515,7 @@ function renderRow(m) {
 function appendLog(li) {
   const log = $('chatLog');
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-  li.title = new Date().toLocaleTimeString();
+  li.title = new Date().toLocaleTimeString(inApp ? window.screenRoomApp.locale : undefined);
   log.append(li);
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
@@ -1407,6 +1700,9 @@ for (const r of document.querySelectorAll('input[name="codec"]')) {
 }
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
+
+if (inApp) $('soundFoot').textContent = 'Share any screen or window, with all your computer’s sound.';
+$('pickRefresh').addEventListener('click', loadSources);
 
 if (!canShare) {
   $('shareBtn').disabled = true;

@@ -1,0 +1,57 @@
+{
+  "name": "screen-room",
+  "productName": "Screen Room",
+  "version": "0.1.0",
+  "description": "Screen Room as a Windows app, so sharing includes your computer's sound in any setup.",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "web": "node copy-web.js",
+    "native": "node native/build.js",
+    "start": "npm run web && npm run native && electron .",
+    "build": "npm run web && npm run native && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "peerjs": "1.5.4"
+  },
+  "allowScripts": {
+    "electron-winstaller": false
+  },
+  "author": "IkariTC",
+  "build": {
+    "appId": "io.github.ikaritc.screenroom",
+    "productName": "Screen Room",
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png",
+      "web/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "compression": "maximum",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "packElevateHelper": false,
+      "differentialPackage": false,
+      "artifactName": "ScreenRoom-Setup-${version}.exe"
+    },
+    "extraResources": [
+      {
+        "from": "native/bin/screen-room-sound.exe",
+        "to": "screen-room-sound.exe"
+      }
+    ]
+  }
+}

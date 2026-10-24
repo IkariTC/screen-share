@@ -77,7 +77,6 @@
   .brand { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
   .lamp { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 0 5px rgba(226,165,90,.16), 0 0 24px 4px rgba(226,165,90,.35); }
   .eyebrow { font: 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
-  .eyebrow.quiet { color: var(--muted); }
   .eyebrow.live { display: flex; align-items: center; gap: 10px; }
   .livedot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 10px 2px rgba(226,165,90,.45); }
   h1 { font-size: 48px; line-height: 1.04; font-weight: 600; letter-spacing: -.025em; text-wrap: balance; }
@@ -164,6 +163,16 @@
   body:not(.paired):not(.watching):not(.sharing) .pane-invite,
   body.paired:not(.watching):not(.sharing) .pane-quiet,
   body.sharing:not(.watching) .pane-self { display: flex; }
+  /* A dot drifting round the empty stage like an old DVD logo; amber, then matcha, at each edge it hits */
+  .bouncer {
+    --c: 226,165,90;
+    position: absolute; top: 0; left: 0; width: 12px; height: 12px; border-radius: 50%; pointer-events: none;
+    background: rgb(var(--c)); box-shadow: 0 0 0 5px rgba(var(--c),.16), 0 0 24px 4px rgba(var(--c),.35);
+    transition: background .4s, box-shadow .4s;
+  }
+  .bouncer.matcha { --c: 156,191,106; }
+  /* Gone while any screen is up, yours included; it comes first in the stage so the panes' text sits over it */
+  body.watching .bouncer, body.sharing .bouncer { display: none; }
   .linkrow { display: flex; flex-wrap: wrap; gap: 10px; }
   .linkbox {
     flex: 1 1 240px; min-width: 0; height: 52px; padding: 0 16px; border-radius: 14px;
@@ -435,7 +444,6 @@
         </div>
         <div class="stack" id="paneStart">
           <button class="btn primary big" type="submit" id="openBtn">Open my room</button>
-          <p class="hint">You'll get a link to send to friends once you're in.</p>
         </div>
         <div class="stack" id="paneJoin" hidden>
           <label for="friendCode" class="fresh-only">Code from your friend</label>
@@ -471,6 +479,7 @@
   <main class="room">
     <section class="stagecol">
       <div class="stage">
+        <span class="bouncer" id="bouncer" aria-hidden="true"></span>
         <div class="pane pane-invite">
           <div class="pane-col">
             <h1>Send a friend the link.</h1>
@@ -483,11 +492,7 @@
         </div>
         <div class="pane pane-quiet">
           <div class="pane-col">
-            <div class="stack">
-              <p class="eyebrow quiet">Nothing on screen yet</p>
-              <h1>The room is quiet.</h1>
-              <p class="lede">When someone presses “Share my screen”, their screen shows up here.</p>
-            </div>
+            <h1>Waiting for someone to open a stream</h1>
           </div>
         </div>
         <div class="pane pane-self">
@@ -1070,9 +1075,7 @@ function updateDock() {
     ? nameList(others.map(m => m.name)) + ' can see it. Anything they share will take over this space.'
     : '';
   $('selfSub').hidden = !others.length;
-  $('dockHint').textContent = !canShare ? 'Sharing a screen needs a desktop browser.'
-    : others.length ? 'Anyone can share at the same time.'
-    : '';
+  $('dockHint').textContent = canShare ? '' : 'Sharing a screen needs a desktop browser.';
 }
 
 /* ---------- Sending your screen ---------- */
@@ -1509,6 +1512,33 @@ function updateStage() {
   }
   $('unmute').hidden = !(audioBlocked && tiles.length);
 }
+
+// The empty stage's dot. It stops whenever it's hidden (a screen is up), so nothing runs
+// meanwhile; the dot reappearing, or the stage changing size, is what starts it again.
+const bouncer = { x: 40, y: 30, dx: 1, dy: 1, last: 0, frame: 0 };
+const BOUNCE_SPEED = 70;                          // px a second
+function startBounce() {
+  if (!bouncer.frame) { bouncer.last = 0; bouncer.frame = requestAnimationFrame(bounce); }
+}
+function bounce(now) {
+  const b = bouncer, dot = $('bouncer'), box = dot.parentElement;
+  if (!dot.offsetParent) { b.frame = 0; return; }
+  const dt = b.last ? Math.min((now - b.last) / 1000, .1) : 0;
+  b.last = now;
+  // The 5px halo stays inside too
+  const halo = 5, maxX = box.clientWidth - dot.offsetWidth - halo, maxY = box.clientHeight - dot.offsetHeight - halo;
+  b.x += b.dx * BOUNCE_SPEED * dt;
+  b.y += b.dy * BOUNCE_SPEED * dt;
+  let hit = false;
+  if (b.x < halo) { b.x = halo; b.dx = 1; hit = true; } else if (b.x > maxX) { b.x = maxX; b.dx = -1; hit = true; }
+  if (b.y < halo) { b.y = halo; b.dy = 1; hit = true; } else if (b.y > maxY) { b.y = maxY; b.dy = -1; hit = true; }
+  if (hit) dot.classList.toggle('matcha');
+  dot.style.transform = 'translate(' + b.x + 'px, ' + b.y + 'px)';
+  b.frame = requestAnimationFrame(bounce);
+}
+const bounceWatch = new ResizeObserver(startBounce);
+bounceWatch.observe($('bouncer'));
+bounceWatch.observe(document.querySelector('.stage'));
 
 /* ---------- Per-person volume ---------- */
 function volControls(m) {

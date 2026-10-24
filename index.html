@@ -77,7 +77,6 @@
   .brand { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
   .lamp { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 0 5px rgba(226,165,90,.16), 0 0 24px 4px rgba(226,165,90,.35); }
   .eyebrow { font: 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
-  .eyebrow.quiet { color: var(--muted); }
   .eyebrow.live { display: flex; align-items: center; gap: 10px; }
   .livedot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--amber); box-shadow: 0 0 10px 2px rgba(226,165,90,.45); }
   h1 { font-size: 48px; line-height: 1.04; font-weight: 600; letter-spacing: -.025em; text-wrap: balance; }
@@ -135,7 +134,8 @@
   /* ---------- Room ---------- */
   .app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
   body:not(.in-room) .app { display: none; }
-  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 24px; }
+  /* The lamp's 5px halo starts where the stage does: the room's 20px side padding, plus 5 */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 24px 14px 25px; }
   .roomstatus { font-size: 15px; color: var(--muted); }
   .roomstatus.bad { color: var(--rust); }
   .bar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -163,6 +163,16 @@
   body:not(.paired):not(.watching):not(.sharing) .pane-invite,
   body.paired:not(.watching):not(.sharing) .pane-quiet,
   body.sharing:not(.watching) .pane-self { display: flex; }
+  /* A dot drifting round the empty stage like an old DVD logo; amber, then matcha, at each edge it hits */
+  .bouncer {
+    --c: 226,165,90;
+    position: absolute; top: 0; left: 0; width: 12px; height: 12px; border-radius: 50%; pointer-events: none;
+    background: rgb(var(--c)); box-shadow: 0 0 0 5px rgba(var(--c),.16), 0 0 24px 4px rgba(var(--c),.35);
+    transition: background .4s, box-shadow .4s;
+  }
+  .bouncer.matcha { --c: 156,191,106; }
+  /* Gone while any screen is up, yours included; it comes first in the stage so the panes' text sits over it */
+  body.watching .bouncer, body.sharing .bouncer { display: none; }
   .linkrow { display: flex; flex-wrap: wrap; gap: 10px; }
   .linkbox {
     flex: 1 1 240px; min-width: 0; height: 52px; padding: 0 16px; border-radius: 14px;
@@ -190,6 +200,11 @@
   .streams.spotlight .tile { flex: 0 0 104px; width: 184px; z-index: 2; cursor: pointer; border: 1px solid var(--line-strong); }
   .streams.spotlight .tile:hover { border-color: var(--amber); }
   .streams.spotlight .tile.spot { position: absolute; inset: 0; width: auto; z-index: 1; cursor: default; border: 0; border-radius: 0; }
+  /* A stream filling the page: covers the room but stays in the tab. The stage rises over the dock and side, under requests to join. */
+  body.filling { overflow: hidden; }
+  body.filling .stage { z-index: 15; }
+  body.filling .streams .tile.filled { position: fixed; inset: 0; width: auto; z-index: 3; border: 0; border-radius: 0; cursor: default; }
+  body.filling .tile.filled:not(.awake) { cursor: none; }
   body.watching .streams.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); grid-auto-rows: 1fr; gap: 8px; padding: 8px; }
 
   .tile-tag { position: absolute; top: 16px; left: 16px; z-index: 1; display: flex; align-items: center; gap: 8px; pointer-events: none; }
@@ -245,6 +260,7 @@
   body.sharing #stopBtn { display: inline-flex; }
   body.sharing #shareBtn { display: none; }
   .dock-note { flex: 1 1 200px; font-size: 14px; color: var(--muted); }
+  .dock-note:empty { flex-basis: 0; }               /* still pushes the buttons right, without wrapping them */
   #audioNote { display: none; }
   body.sharing #audioNote { display: flex; align-items: baseline; gap: 8px; }
   body.sharing #dockHint { display: none; }
@@ -255,11 +271,12 @@
   body.sharing.watching #miniPreview { display: block; }
 
   .settings { position: relative; }
+  body:not(.host) .host-only { display: none; }
   .settings > .btn { position: relative; width: 48px; height: 48px; background: var(--raised); }
   .settings > .btn .ic { width: 20px; height: 20px; }
   .settings > .btn[aria-expanded="true"] { border-color: var(--amber); background: var(--amber-tint); color: var(--amber); }
-  #roomBtn.locked { color: var(--amber); }
   #settingsBtn.alert::after { content: ""; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--rust); }
+  #sideBtn.unread::after { content: ""; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
   .popover {
     position: absolute; z-index: 10; right: 0; bottom: calc(100% + 22px); width: min(380px, calc(100vw - 66px));
     max-height: calc(100dvh - 150px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 20px;
@@ -297,7 +314,9 @@
   .statline span + span::before { content: " · "; color: var(--muted); }
   .statline .warn { color: var(--rust); }
 
-  /* People + chat */
+  /* People + chat: hidden until its button in the dock opens it */
+  body:not(.side-open) .side { display: none; }
+  body:not(.side-open) .room { grid-template-columns: minmax(0, 1fr); }
   .side { min-height: 0; display: flex; flex-direction: column; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
   .people-wrap { display: flex; flex-direction: column; gap: 8px; max-height: 45%; padding: 18px 18px 12px; border-bottom: 1px solid var(--line); overflow-y: auto; }
   .people { list-style: none; margin: 0; padding: 0; }
@@ -375,7 +394,7 @@
     h1 { font-size: 40px; }
     .pane h1 { font-size: 32px; }
     .top { padding: 20px 24px; }
-    .bar { padding: 12px 16px; }
+    .bar { padding: 12px 16px 12px 17px; }
     .room { gap: 12px; padding: 4px 12px 12px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -394,11 +413,12 @@
     <symbol id="i-signal" viewBox="0 0 24 24"><path d="M5 18v-3M10 18v-7M15 18V8M20 18V5"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></symbol>
+    <symbol id="i-fill" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M14 11h3v3M10 17H7v-3M17 11l-3.5 3.5M7 17l3.5-3.5"/></symbol>
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4.5A2 2 0 0 1 4 15V6z"/><path d="M8 9h8M8 13h5"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
-    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
-    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.75-1.4"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
   </defs>
 </svg>
@@ -412,31 +432,29 @@
   <main class="entry-main">
     <div class="entry-col">
       <form class="card" id="entryForm">
-        <div class="coderow invited-only"><span>Room code</span><span class="code" id="invitedCode"></span></div>
+        <div class="coderow invited-only"><span data-t="roomCode">Room code</span><span class="code" id="invitedCode"></span></div>
         <div class="field">
-          <label for="entryName">Your name</label>
-          <input class="input" id="entryName" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest">
+          <label for="entryName" data-t="yourName">Your name</label>
+          <input class="input" id="entryName" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest" data-t-placeholder="guest">
         </div>
         <div class="seg fresh-only">
-          <button type="button" id="tabStart" aria-pressed="true">Start a room</button>
-          <button type="button" id="tabJoin" aria-pressed="false">I have a code</button>
+          <button type="button" id="tabStart" aria-pressed="true" data-t="startRoom">Start a room</button>
+          <button type="button" id="tabJoin" aria-pressed="false" data-t="haveCode">I have a code</button>
         </div>
         <div class="stack" id="paneStart">
-          <button class="btn primary big" type="submit" id="openBtn">Open my room</button>
-          <p class="hint">You'll get a link to send to friends once you're in.</p>
+          <button class="btn primary big" type="submit" id="openBtn" data-t="openRoom">Open my room</button>
         </div>
         <div class="stack" id="paneJoin" hidden>
-          <label for="friendCode" class="fresh-only">Code from your friend</label>
+          <label for="friendCode" class="fresh-only" data-t="friendCode">Code from your friend</label>
           <div class="joinrow">
             <input class="input fresh-only" id="friendCode" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC123">
-            <button class="btn primary big" type="submit" id="joinBtn">Join room</button>
+            <button class="btn primary big" type="submit" id="joinBtn" data-t="joinRoom">Join room</button>
           </div>
-          <p class="hint" id="joinHint">Anyone already in the room can read you theirs.</p>
         </div>
         <p class="entry-msg" id="entryMsg" role="status" hidden></p>
       </form>
-      <p class="foot mono fresh-only" id="soundFoot">Sharing sound works best in Chrome or Edge on a computer.</p>
-      <p class="foot invited-only">Not what you wanted? <button type="button" class="linkbtn" id="ownRoomBtn">Start your own room</button></p>
+      <p class="foot mono fresh-only" id="soundFoot" hidden></p>
+      <p class="foot invited-only"><span data-t="notWanted">Not what you wanted?</span> <button type="button" class="linkbtn" id="ownRoomBtn" data-t="ownRoom">Start your own room</button></p>
     </div>
   </main>
 </section>
@@ -445,89 +463,93 @@
 <div class="app" id="app">
   <header class="bar">
     <div class="brand"><span class="lamp" aria-hidden="true"></span>screen room</div>
-    <p class="roomstatus" id="status" role="status">just you so far</p>
+    <p class="roomstatus" id="status" role="status"></p>
     <div class="bar-actions">
-      <button class="btn copy-invite" type="button" data-label="Copy invite link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl">Copy invite link</span></button>
-      <label class="namechip" title="Change your name">
+      <button class="btn copy-invite" type="button"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl" data-t="copyInvite">Copy invite link</span></button>
+      <label class="namechip" title="Change your name" data-t-title="changeName">
         <span class="dot" id="meDot" aria-hidden="true"></span>
-        <input id="nameInput" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest" aria-label="Your name">
+        <input id="nameInput" maxlength="24" autocomplete="nickname" spellcheck="false" placeholder="Guest" aria-label="Your name" data-t-aria-label="yourName">
         <svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg>
       </label>
-      <button class="btn ghost" type="button" id="leaveBtn">Leave</button>
+      <button class="btn ghost" type="button" id="leaveBtn" data-t="leave">Leave</button>
     </div>
   </header>
 
   <main class="room">
     <section class="stagecol">
       <div class="stage">
+        <span class="bouncer" id="bouncer" aria-hidden="true"></span>
         <div class="pane pane-invite">
           <div class="pane-col">
-            <div class="stack">
-              <p class="eyebrow" id="roomEyebrow">Your room is open</p>
-              <h1>Send a friend the link.</h1>
-            </div>
+            <h1 data-t="sendLink">Send a friend the link.</h1>
             <div class="linkrow">
               <div class="linkbox" id="inviteLink">getting your link…</div>
-              <button class="btn primary big copy-invite" type="button" data-label="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl">Copy link</span></button>
+              <button class="btn primary big copy-invite" type="button"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span class="lbl" data-t="copyLink">Copy link</span></button>
             </div>
-            <p class="codeline"><span>or read them your code</span><span class="code" id="myCode">······</span></p>
+            <p class="codeline"><span data-t="readCode">or read them your code</span><span class="code" id="myCode">······</span></p>
           </div>
         </div>
         <div class="pane pane-quiet">
           <div class="pane-col">
-            <div class="stack">
-              <p class="eyebrow quiet">Nothing on screen yet</p>
-              <h1>The room is quiet.</h1>
-              <p class="lede">When someone presses “Share my screen”, their screen shows up here.</p>
-            </div>
+            <h1 data-t="waiting">Waiting for someone to open a stream</h1>
           </div>
         </div>
         <div class="pane pane-self">
           <div class="pane-col">
             <video id="localPreview" autoplay muted playsinline></video>
             <div class="stack">
-              <p class="eyebrow live"><span class="livedot" aria-hidden="true"></span>Live</p>
-              <h1>You're sharing your screen.</h1>
+              <p class="eyebrow live"><span class="livedot" aria-hidden="true"></span><span data-t="live">Live</span></p>
+              <h1 data-t="youShare">You're sharing your screen.</h1>
               <p class="lede" id="selfSub"></p>
             </div>
           </div>
         </div>
         <div id="streams" class="streams spotlight"></div>
-        <button class="btn glass" type="button" id="unmute" hidden><svg class="ic" aria-hidden="true"><use href="#i-volume"/></svg>Turn on sound</button>
+        <button class="btn glass" type="button" id="unmute" hidden><svg class="ic" aria-hidden="true"><use href="#i-volume"/></svg><span data-t="turnOnSound">Turn on sound</span></button>
       </div>
 
       <div class="dock">
-        <button class="btn tint" type="button" id="shareBtn"><svg class="ic" aria-hidden="true"><use href="#i-screen"/></svg>Share my screen</button>
-        <button class="btn stop" type="button" id="stopBtn"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg>Stop sharing</button>
-        <p class="dock-note" id="dockHint">You can start sharing before anyone arrives.</p>
+        <button class="btn tint" type="button" id="shareBtn"><svg class="ic" aria-hidden="true"><use href="#i-screen"/></svg><span data-t="shareScreen">Share my screen</span></button>
+        <button class="btn stop" type="button" id="stopBtn"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg><span data-t="stopSharing">Stop sharing</span></button>
+        <p class="dock-note" id="dockHint"></p>
         <p class="dock-note" id="audioNote" role="status"></p>
-        <video id="miniPreview" autoplay muted playsinline aria-label="Preview of your screen"></video>
+        <video id="miniPreview" autoplay muted playsinline aria-label="Preview of your screen" data-t-aria-label="previewOfScreen"></video>
         <div class="settings">
-          <button class="btn icon" type="button" id="roomBtn" aria-label="Room settings" title="Room settings" aria-expanded="false" aria-controls="roomPanel"><svg class="ic" aria-hidden="true"><use href="#i-unlock"/></svg></button>
+          <button class="btn icon" type="button" id="roomBtn" aria-label="Room settings" title="Room settings" data-t-aria-label="roomSettings" data-t-title="roomSettings" aria-expanded="false" aria-controls="roomPanel"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg></button>
           <div class="popover" id="roomPanel" hidden>
             <div class="pop-head">
-              <h2>Room settings</h2>
-              <button class="btn ghost icon" type="button" id="roomClose" aria-label="Close room settings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+              <h2 data-t="roomSettings">Room settings</h2>
+              <button class="btn ghost icon" type="button" id="roomClose" aria-label="Close room settings" data-t-aria-label="closeRoomSettings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
-            <fieldset>
-              <legend>Who can come in</legend>
+            <fieldset class="host-only">
+              <legend data-t="whoCanCome">Who can come in</legend>
               <div class="optgrid cols-2">
-                <label class="opt"><input type="radio" name="entry" value="open" checked><span class="box two"><b>Open</b><small>anyone with the link</small></span></label>
-                <label class="opt"><input type="radio" name="entry" value="locked"><span class="box two"><b>Locked</b><small>you let people in</small></span></label>
+                <label class="opt"><input type="radio" name="entry" value="open" checked><span class="box two"><b data-t="open">Open</b><small data-t="openSub">anyone with the link</small></span></label>
+                <label class="opt"><input type="radio" name="entry" value="locked"><span class="box two"><b data-t="locked">Locked</b><small data-t="lockedSub">you let people in</small></span></label>
               </div>
             </fieldset>
-            <p class="hint small">Everyone in the room shares this. While it’s locked, whoever’s link or code a newcomer used decides whether they come in.</p>
+            <!-- Each person picks their own; the names stay in their own language -->
+            <fieldset>
+              <legend data-t="language">Language</legend>
+              <div class="optgrid cols-2">
+                <label class="opt"><input type="radio" name="lang" value="en-US"><span class="box two" lang="en-US"><b>English</b><small>United States</small></span></label>
+                <label class="opt"><input type="radio" name="lang" value="pt-BR"><span class="box two" lang="pt-BR"><b>Português</b><small>Brasil</small></span></label>
+              </div>
+            </fieldset>
           </div>
         </div>
         <div class="settings">
-          <button class="btn icon" type="button" id="settingsBtn" aria-label="Stream settings" aria-expanded="false" aria-controls="settingsPanel"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></button>
+          <button class="btn icon" type="button" id="sideBtn" aria-label="People and chat" title="People and chat" data-t-aria-label="peopleChat" data-t-title="peopleChat" aria-expanded="false" aria-controls="side"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg></button>
+        </div>
+        <div class="settings">
+          <button class="btn icon" type="button" id="settingsBtn" aria-label="Stream settings" data-t-aria-label="streamSettings" aria-expanded="false" aria-controls="settingsPanel"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></button>
           <div class="popover" id="settingsPanel" hidden>
             <div class="pop-head">
-              <h2>Stream settings</h2>
-              <button class="btn ghost icon" type="button" id="settingsClose" aria-label="Close settings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+              <h2 data-t="streamSettings">Stream settings</h2>
+              <button class="btn ghost icon" type="button" id="settingsClose" aria-label="Close settings" data-t-aria-label="closeSettings"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
             <fieldset>
-              <legend>Picture</legend>
+              <legend data-t="picture">Picture</legend>
               <div class="optgrid cols-2">
                 <label class="opt"><input type="radio" name="quality" value="720p30"><span class="box">720p · 30 fps</span></label>
                 <label class="opt"><input type="radio" name="quality" value="1080p30"><span class="box">1080p · 30 fps</span></label>
@@ -536,10 +558,10 @@
               </div>
             </fieldset>
             <fieldset>
-              <legend>Best for</legend>
+              <legend data-t="bestFor">Best for</legend>
               <div class="optgrid cols-2">
-                <label class="opt"><input type="radio" name="mode" value="motion" checked><span class="box two"><b>Games and video</b><small>stays smooth</small></span></label>
-                <label class="opt"><input type="radio" name="mode" value="detail"><span class="box two"><b>Text and code</b><small>stays sharp</small></span></label>
+                <label class="opt"><input type="radio" name="mode" value="motion" checked><span class="box two"><b data-t="games">Games and video</b><small data-t="smooth">stays smooth</small></span></label>
+                <label class="opt"><input type="radio" name="mode" value="detail"><span class="box two"><b data-t="textCode">Text and code</b><small data-t="sharp">stays sharp</small></span></label>
               </div>
             </fieldset>
             <fieldset>
@@ -551,31 +573,31 @@
                   <label class="opt"><input type="radio" name="codec" value="VP9"><span class="box">VP9</span></label>
                   <label class="opt"><input type="radio" name="codec" value="AV1"><span class="box">AV1</span></label>
                 </div>
-                <p class="hint small">Auto suits most computers. H.264 usually runs on the graphics card.</p>
+                <p class="hint small" data-t="codecHint">Auto suits most computers. H.264 usually runs on the graphics card.</p>
               </div>
             </fieldset>
             <hr>
             <div class="now">
-              <h3>Right now</h3>
+              <h3 data-t="rightNow">Right now</h3>
               <div id="statsOut"></div>
-              <p class="hint small" id="statsEmpty">Live numbers show up here while you're sharing with someone.</p>
+              <p class="hint small" id="statsEmpty" data-t="statsEmpty">Live numbers show up here while you're sharing with someone.</p>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <aside class="side">
+    <aside class="side" id="side">
       <div class="people-wrap">
         <h2 id="peopleTitle">In the room · 1</h2>
         <ul class="people" id="people"></ul>
       </div>
       <div class="chat">
-        <h2>Chat</h2>
+        <h2 data-t="chat">Chat</h2>
         <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
         <form class="chat-form" id="chatForm">
-          <input id="chatInput" maxlength="500" autocomplete="off" placeholder="Say something" aria-label="Chat message">
-          <button class="btn icon" type="submit" aria-label="Send message"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
+          <input id="chatInput" maxlength="500" autocomplete="off" placeholder="Say something" aria-label="Chat message" data-t-placeholder="saySomething" data-t-aria-label="chatMessage">
+          <button class="btn icon" type="submit" aria-label="Send message" data-t-aria-label="sendMessage"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
         </form>
       </div>
     </aside>
@@ -589,28 +611,28 @@
 <dialog class="picker" id="picker" aria-labelledby="pickerTitle">
   <form method="dialog" class="picker-box">
     <div class="pop-head">
-      <h2 id="pickerTitle">Choose what to share</h2>
+      <h2 id="pickerTitle" data-t="chooseShare">Choose what to share</h2>
       <div class="pop-tools">
-        <button class="btn ghost icon" type="button" id="pickRefresh" aria-label="Refresh the list" title="Refresh the list"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>
-        <button class="btn ghost icon" value="cancel" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <button class="btn ghost icon" type="button" id="pickRefresh" aria-label="Refresh the list" title="Refresh the list" data-t-aria-label="refreshList" data-t-title="refreshList"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+        <button class="btn ghost icon" value="cancel" aria-label="Close" data-t-aria-label="close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
     </div>
     <div class="picker-body">
       <section>
-        <h3>Screens</h3>
+        <h3 data-t="screens">Screens</h3>
         <div class="srcgrid" id="screenList"></div>
       </section>
       <section>
-        <h3>Windows</h3>
+        <h3 data-t="windows">Windows</h3>
         <div class="srcgrid" id="windowList"></div>
-        <p class="hint small" id="windowEmpty" hidden>No open windows to share. Minimised windows don’t show up.</p>
+        <p class="hint small" id="windowEmpty" data-t="noWindows" hidden>No open windows to share. Minimised windows don’t show up.</p>
       </section>
     </div>
     <div class="picker-foot">
-      <p class="hint small" id="pickSound">All sound from your computer is shared, whichever you pick.</p>
+      <p class="hint small" id="pickSound"></p>
       <div class="picker-actions">
-        <button class="btn ghost" value="cancel">Cancel</button>
-        <button class="btn primary" value="share" id="pickShare" disabled>Share</button>
+        <button class="btn ghost" value="cancel" data-t="cancel">Cancel</button>
+        <button class="btn primary" value="share" id="pickShare" data-t="share" disabled>Share</button>
       </div>
     </div>
   </form>
@@ -639,10 +661,12 @@ const members = new Map();
 // anyone else who dials your code waits until you let them in.
 const vouched = new Set();
 // Rooms start open: anyone who dials your code comes straight in. A locked room asks first.
-// The setting is shared by the whole room, and a newcomer takes on the room's.
+// Only whoever opened the room can change it, and a newcomer takes on the room's.
 let locked = false;
+// The code of whoever opened the room. You learn it from the member you joined through.
+let hostCode = null;
 let peer, myCode, localStream, manualTarget = null;
-let layout = 'spotlight', spotCode = null, audioBlocked = false;
+let layout = 'spotlight', spotCode = null, filled = null, audioBlocked = false;
 let ready = false, inRoom = false, pendingJoin = null, joinTimer = null;
 let entryMode = 'start', showDetails = false;
 
@@ -650,6 +674,174 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
+
+/* ---------- Language ---------- */
+// Everything the page says, in English (US) and Brazilian Portuguese. Wording that takes a name,
+// a code or a count is a function. Static text in the page points here with data-t (its text)
+// and data-t-aria-label / data-t-title / data-t-placeholder (those attributes).
+const LIMITS_PT = { bandwidth: 'banda', cpu: 'processador', other: 'outro motivo' };
+const LANGS = {
+  'en-US': {
+    roomCode: 'Room code', yourName: 'Your name', guest: 'Guest', guestName: code => 'Guest ' + code,
+    startRoom: 'Start a room', haveCode: 'I have a code', openRoom: 'Open my room',
+    friendCode: 'Code from your friend', joinRoom: 'Join room',
+    notWanted: 'Not what you wanted?', ownRoom: 'Start your own room',
+    appSoundFoot: 'Share any screen or window, with all your computer’s sound.',
+    copyInvite: 'Copy invite link', copyLink: 'Copy link', linkCopied: 'Link copied', copyThisLink: 'Copy this link:',
+    changeName: 'Change your name', leave: 'Leave',
+    sendLink: 'Send a friend the link.', gettingLink: 'getting your link…', readCode: 'or read them your code',
+    waiting: 'Waiting for someone to open a stream',
+    live: 'Live', youShare: 'You’re sharing your screen.',
+    canSee: (names, n) => names + ' can see it. Anything they share will take over this space.',
+    turnOnSound: 'Turn on sound', shareScreen: 'Share my screen', stopSharing: 'Stop sharing',
+    previewOfScreen: 'Preview of your screen',
+    needsDesktop: 'Sharing a screen needs a desktop browser.',
+    needsHttps: 'Screen sharing needs a desktop browser over https',
+    roomSettings: 'Room settings', closeRoomSettings: 'Close room settings',
+    whoCanCome: 'Who can come in', open: 'Open', openSub: 'anyone with the link', locked: 'Locked', lockedSub: 'you let people in',
+    language: 'Language',
+    peopleChat: 'People and chat',
+    streamSettings: 'Stream settings', closeSettings: 'Close settings',
+    picture: 'Picture', bestFor: 'Best for', games: 'Games and video', smooth: 'stays smooth', textCode: 'Text and code', sharp: 'stays sharp',
+    codecHint: 'Auto suits most computers. H.264 usually runs on the graphics card.',
+    rightNow: 'Right now', statsEmpty: 'Live numbers show up here while you’re sharing with someone.',
+    toName: name => 'To ' + name, relayed: 'relayed', direct: 'direct', limitedBy: why => 'limited by ' + why,
+    inRoom: n => 'In the room · ' + n, you: 'you', sharing: 'sharing', watching: 'watching',
+    and: 'and', others: n => n + ' others',
+    chat: 'Chat', saySomething: 'Say something', chatMessage: 'Chat message', sendMessage: 'Send message',
+    youOpened: 'You opened the room', joined: name => name + ' joined', left: name => name + ' left',
+    renamed: (old, now) => old + ' is now ' + now,
+    startedSharing: name => name + ' started sharing', stoppedSharing: name => name + ' stopped sharing',
+    youLocked: 'You locked the room', youUnlocked: 'You unlocked the room',
+    lockedBy: name => name + ' locked the room', unlockedBy: name => name + ' unlocked the room',
+    aloneHere: 'No one else is here yet',
+    wantsIn: ' wants to join the room.', letIn: 'Let them in', notNow: 'Not now',
+    isSharing: ' is sharing', noSound: 'no sound',
+    details: 'Details', gridView: 'Grid view', spotlightView: 'Spotlight view', popOut: 'Pop out', popBackIn: 'Pop back in',
+    fillPage: 'Fill page', shrinkBack: 'Shrink back', fullscreen: 'Fullscreen',
+    switchTo: name => 'Switch to ' + name + '’s screen',
+    volumeFor: name => 'Volume for ' + name, muteName: name => 'Mute ' + name, unmuteName: name => 'Unmute ' + name,
+    mute: 'Mute', unmute: 'Unmute',
+    noSuchCode: 'No one is using that code. Check it and try again.',
+    typeCode: 'Type the code your friend gave you.',
+    ownCode: 'That’s your own code. Ask your friend for theirs.',
+    connecting: 'Connecting…', connectingTo: code => 'Connecting to ' + code + '…',
+    stillTrying: code => 'Still trying to reach ' + code + '. Check the code, or ask your friend to keep their tab open.',
+    connectedJoining: 'Connected. Joining…', waitingLetIn: 'Connected. Waiting for them to let you in…',
+    denied: 'They didn’t let you in. Ask them, then try again.',
+    noWebrtc: 'This browser can’t do WebRTC. Use Chrome, Edge or Firefox.',
+    connProblem: type => 'Connection problem (' + type + '). Reload to try again.',
+    shareFailedApp: 'Couldn’t share that. If it was a window, it may have closed. Try again.',
+    shareFailed: msg => 'Couldn’t start sharing: ' + msg,
+    soundAll: 'Sharing all sound from your computer, including voice chat and notifications.',
+    soundOn: 'Sound is being shared.',
+    soundWindow: what => 'Sharing ' + what + ' with only its own sound.',
+    soundOthers: what => 'Sharing ' + what + ' with all sound from your computer, except this room’s.',
+    soundSystem: what => 'Sharing ' + what + ' with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.',
+    noSoundApp: what => 'No sound: the app couldn’t pick up sound for ' + what + '. Stop and share again to retry.',
+    noSoundFirefox: 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.',
+    noSoundWindow: 'No sound: this browser can’t share sound from a single window. Stop, then share your Entire screen with “Share system audio” ticked.',
+    noSoundMonitor: 'No sound: “Share system audio” wasn’t ticked. Stop and share again with it ticked.',
+    noSoundTab: 'No sound: “Share tab audio” wasn’t ticked. Stop and share again with it ticked.',
+    noSoundAny: 'No sound is being shared.',
+    chooseShare: 'Choose what to share', refreshList: 'Refresh the list', close: 'Close',
+    screens: 'Screens', windows: 'Windows', noWindows: 'No open windows to share. Minimised windows don’t show up.',
+    splitSound: 'A window shares only its own sound. A screen shares all sound except this room’s.',
+    allSound: 'All sound from your computer is shared, whichever you pick.',
+    cancel: 'Cancel', share: 'Share',
+    screenN: n => 'Screen ' + n, mainScreen: 'main', minimised: 'Minimised · opens back up when you share',
+  },
+  'pt-BR': {
+    roomCode: 'Código da sala', yourName: 'Seu nome', guest: 'Convidado', guestName: code => 'Convidado ' + code,
+    startRoom: 'Criar uma sala', haveCode: 'Tenho um código', openRoom: 'Abrir minha sala',
+    friendCode: 'Código do seu amigo', joinRoom: 'Entrar na sala',
+    notWanted: 'Não era isso?', ownRoom: 'Crie sua própria sala',
+    appSoundFoot: 'Compartilhe qualquer tela ou janela, com todo o som do seu computador.',
+    copyInvite: 'Copiar link de convite', copyLink: 'Copiar link', linkCopied: 'Link copiado', copyThisLink: 'Copie este link:',
+    changeName: 'Mudar seu nome', leave: 'Sair',
+    sendLink: 'Mande o link para um amigo.', gettingLink: 'gerando seu link…', readCode: 'ou passe o seu código',
+    waiting: 'Esperando alguém abrir uma transmissão',
+    live: 'Ao vivo', youShare: 'Você está compartilhando sua tela.',
+    canSee: (names, n) => names + (n > 1 ? ' podem' : ' pode') + ' ver sua tela. Qualquer coisa compartilhada vai ocupar este espaço.',
+    turnOnSound: 'Ativar som', shareScreen: 'Compartilhar minha tela', stopSharing: 'Parar de compartilhar',
+    previewOfScreen: 'Prévia da sua tela',
+    needsDesktop: 'Para compartilhar a tela, use um navegador de computador.',
+    needsHttps: 'Compartilhar a tela precisa de um navegador de computador com https',
+    roomSettings: 'Configurações da sala', closeRoomSettings: 'Fechar configurações da sala',
+    whoCanCome: 'Quem pode entrar', open: 'Aberta', openSub: 'qualquer pessoa com o link', locked: 'Trancada', lockedSub: 'você aprova quem entra',
+    language: 'Idioma',
+    peopleChat: 'Pessoas e chat',
+    streamSettings: 'Configurações da transmissão', closeSettings: 'Fechar configurações',
+    picture: 'Imagem', bestFor: 'Ideal para', games: 'Jogos e vídeo', smooth: 'fica fluido', textCode: 'Texto e código', sharp: 'fica nítido',
+    codecHint: 'O modo Auto serve para a maioria dos computadores. O H.264 costuma rodar na placa de vídeo.',
+    rightNow: 'Agora', statsEmpty: 'Os números ao vivo aparecem aqui enquanto você compartilha com alguém.',
+    toName: name => 'Para ' + name, relayed: 'retransmitido', direct: 'direto', limitedBy: why => 'limitado por ' + (LIMITS_PT[why] || why),
+    inRoom: n => 'Na sala · ' + n, you: 'você', sharing: 'compartilhando', watching: 'assistindo',
+    and: 'e', others: n => n + ' outros',
+    chat: 'Chat', saySomething: 'Diga algo', chatMessage: 'Mensagem do chat', sendMessage: 'Enviar mensagem',
+    youOpened: 'Você abriu a sala', joined: name => name + ' entrou', left: name => name + ' saiu',
+    renamed: (old, now) => old + ' agora é ' + now,
+    startedSharing: name => name + ' começou a compartilhar', stoppedSharing: name => name + ' parou de compartilhar',
+    youLocked: 'Você trancou a sala', youUnlocked: 'Você destrancou a sala',
+    lockedBy: name => name + ' trancou a sala', unlockedBy: name => name + ' destrancou a sala',
+    aloneHere: 'Ainda não tem mais ninguém aqui',
+    wantsIn: ' quer entrar na sala.', letIn: 'Deixar entrar', notNow: 'Agora não',
+    isSharing: ' está compartilhando', noSound: 'sem som',
+    details: 'Detalhes', gridView: 'Ver em grade', spotlightView: 'Ver em destaque', popOut: 'Janela flutuante', popBackIn: 'Trazer de volta',
+    fillPage: 'Preencher página', shrinkBack: 'Reduzir', fullscreen: 'Tela cheia',
+    switchTo: name => 'Mudar para a tela de ' + name,
+    volumeFor: name => 'Volume de ' + name, muteName: name => 'Silenciar ' + name, unmuteName: name => 'Ativar som de ' + name,
+    mute: 'Silenciar', unmute: 'Ativar som',
+    noSuchCode: 'Ninguém está usando esse código. Confira e tente de novo.',
+    typeCode: 'Digite o código que seu amigo te passou.',
+    ownCode: 'Esse é o seu próprio código. Peça o código do seu amigo.',
+    connecting: 'Conectando…', connectingTo: code => 'Conectando a ' + code + '…',
+    stillTrying: code => 'Ainda tentando falar com ' + code + '. Confira o código ou peça para seu amigo deixar a aba aberta.',
+    connectedJoining: 'Conectado. Entrando…', waitingLetIn: 'Conectado. Esperando deixarem você entrar…',
+    denied: 'Não deixaram você entrar. Fale com a pessoa e tente de novo.',
+    noWebrtc: 'Este navegador não suporta WebRTC. Use Chrome, Edge ou Firefox.',
+    connProblem: type => 'Problema de conexão (' + type + '). Recarregue a página para tentar de novo.',
+    shareFailedApp: 'Não deu para compartilhar isso. Se era uma janela, talvez tenha sido fechada. Tente de novo.',
+    shareFailed: msg => 'Não deu para começar a compartilhar: ' + msg,
+    soundAll: 'Compartilhando todo o som do seu computador, incluindo chamadas de voz e notificações.',
+    soundOn: 'O som está sendo compartilhado.',
+    soundWindow: what => 'Compartilhando ' + what + ' só com o próprio som.',
+    soundOthers: what => 'Compartilhando ' + what + ' com todo o som do seu computador, exceto o desta sala.',
+    soundSystem: what => 'Compartilhando ' + what + ' com todo o som do seu computador. As transmissões dos seus amigos ficam sem som aqui enquanto isso, para eles não ouvirem o próprio som de volta.',
+    noSoundApp: what => 'Sem som: o app não conseguiu captar o som de ' + what + '. Pare e compartilhe de novo para tentar outra vez.',
+    noSoundFirefox: 'Sem som: o Firefox não compartilha som. Use o Chrome ou o Edge para incluir o som.',
+    noSoundWindow: 'Sem som: este navegador não compartilha o som de uma janela só. Pare e compartilhe a Tela inteira com “Compartilhar áudio do sistema” marcado.',
+    noSoundMonitor: 'Sem som: “Compartilhar áudio do sistema” não estava marcado. Pare e compartilhe de novo com essa opção marcada.',
+    noSoundTab: 'Sem som: “Compartilhar áudio da guia” não estava marcado. Pare e compartilhe de novo com essa opção marcada.',
+    noSoundAny: 'Nenhum som está sendo compartilhado.',
+    chooseShare: 'Escolha o que compartilhar', refreshList: 'Atualizar a lista', close: 'Fechar',
+    screens: 'Telas', windows: 'Janelas', noWindows: 'Nenhuma janela aberta para compartilhar. Janelas minimizadas não aparecem.',
+    splitSound: 'Uma janela compartilha só o próprio som. Uma tela compartilha todo o som, exceto o desta sala.',
+    allSound: 'Todo o som do seu computador é compartilhado, seja qual for a escolha.',
+    cancel: 'Cancelar', share: 'Compartilhar',
+    screenN: n => 'Tela ' + n, mainScreen: 'principal', minimised: 'Minimizada · volta a abrir quando você compartilhar',
+  },
+};
+
+// A choice made in the room wins. Otherwise the first English or Portuguese entry in the browser's
+// language list does (in the app, Windows' language, since its browser only knows English).
+function pickLanguage() {
+  const saved = store.get('screenroom-lang');
+  if (LANGS[saved]) return saved;
+  const prefs = [inApp && window.screenRoomApp.locale, ...(navigator.languages || [navigator.language])];
+  for (const l of prefs) {
+    const code = String(l || '').toLowerCase();
+    if (code.startsWith('pt')) return 'pt-BR';
+    if (code.startsWith('en')) return 'en-US';
+  }
+  return 'en-US';
+}
+let lang = pickLanguage();
+
+function t(key, ...args) {
+  const s = LANGS[lang][key];
+  return typeof s === 'function' ? s(...args) : s;
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -672,8 +864,8 @@ const setting = name => document.querySelector('input[name="' + name + '"]:check
 
 function nameList(names) {
   return names.length <= 3
-    ? names.join(', ').replace(/, ([^,]*)$/, ' and $1')
-    : names.slice(0, 2).join(', ') + ' and ' + (names.length - 2) + ' others';
+    ? names.join(', ').replace(/, ([^,]*)$/, (_, last) => ' ' + t('and') + ' ' + last)
+    : names.slice(0, 2).join(', ') + ' ' + t('and') + ' ' + t('others', names.length - 2);
 }
 
 // The start screen only shows the status when something is wrong
@@ -701,7 +893,7 @@ function colorFor(name) {
 }
 
 function displayName() {
-  return $('nameInput').value.trim().slice(0, 24) || 'Guest ' + (myCode || '').slice(0, 3);
+  return $('nameInput').value.trim().slice(0, 24) || t('guestName', (myCode || '').slice(0, 3));
 }
 
 const siteBase = () => inApp ? SITE : location.origin + location.pathname.replace(/index\.html$/, '');
@@ -716,7 +908,6 @@ function setEntryMode(mode) {
   $('tabJoin').setAttribute('aria-pressed', String(mode === 'join'));
   $('paneStart').hidden = mode !== 'start';
   $('paneJoin').hidden = mode === 'start';
-  $('joinHint').hidden = invited;
   setEntryMsg('');
 }
 
@@ -726,7 +917,10 @@ function enterRoom(opened) {
   clearTimeout(joinTimer);
   setEntryMsg('');
   document.body.classList.add('in-room');
-  if (opened) addSystem('You opened the room');
+  // No one told us whose room this is, so it's ours
+  if (!hostCode) hostCode = myCode;
+  document.body.classList.toggle('host', hostCode === myCode);
+  if (opened) addSystem(t('youOpened'));
   renderMe();
   updateRoomStatus();
   updateStage();
@@ -741,7 +935,7 @@ function startPeer() {
     ready = true;
     $('myCode').textContent = myCode;
     $('inviteLink').textContent = inviteUrl().replace(/^https?:\/\//, '');
-    $('nameInput').placeholder = 'Guest ' + myCode.slice(0, 3);
+    $('nameInput').placeholder = t('guestName', myCode.slice(0, 3));
     sizeName();
     renderMe();
     updateRoomStatus();
@@ -760,12 +954,12 @@ function startPeer() {
       if (manualTarget === code) {
         manualTarget = null;
         clearTimeout(joinTimer);
-        setEntryMsg('No one is using that code. Check it and try again.', 'bad');
+        setEntryMsg(t('noSuchCode'), 'bad');
       }
       return;
     }
-    if (err.type === 'browser-incompatible') { setStatus('This browser can’t do WebRTC. Use Chrome, Edge or Firefox.', 'bad'); return; }
-    setStatus('Connection problem (' + err.type + '). Reload to try again.', 'bad');
+    if (err.type === 'browser-incompatible') { setStatus(t('noWebrtc'), 'bad'); return; }
+    setStatus(t('connProblem', err.type), 'bad');
   });
 
   peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
@@ -774,7 +968,7 @@ function startPeer() {
 function getMember(code) {
   let m = members.get(code);
   if (!m) {
-    m = { code, name: 'Guest ' + code.slice(0, 3), joined: false, sharing: false, volume: 100, muted: false, last: {} };
+    m = { code, name: t('guestName', code.slice(0, 3)), joined: false, sharing: false, volume: 100, muted: false, last: {} };
     members.set(code, m);
   }
   return m;
@@ -782,9 +976,9 @@ function getMember(code) {
 
 function connectTo(code, manual = false) {
   code = code.trim().toUpperCase();
-  if (!code) { if (manual) setEntryMsg('Type the code your friend gave you.', 'bad'); return; }
-  if (code === myCode) { if (manual) setEntryMsg('That’s your own code. Ask your friend for theirs.', 'bad'); return; }
-  if (manual && !ready) { pendingJoin = code; setEntryMsg('Connecting…'); return; }
+  if (!code) { if (manual) setEntryMsg(t('typeCode'), 'bad'); return; }
+  if (code === myCode) { if (manual) setEntryMsg(t('ownCode'), 'bad'); return; }
+  if (manual && !ready) { pendingJoin = code; setEntryMsg(t('connecting')); return; }
   const m = members.get(code);
   if (m && m.conn && (m.conn.open || !manual)) {
     if (manual && m.joined) enterRoom(false);
@@ -792,10 +986,10 @@ function connectTo(code, manual = false) {
   }
   if (manual) {
     manualTarget = code;
-    setEntryMsg('Connecting to ' + code + '…');
+    setEntryMsg(t('connectingTo', code));
     clearTimeout(joinTimer);
     joinTimer = setTimeout(() => {
-      if (manualTarget === code && !inRoom) setEntryMsg('Still trying to reach ' + code + '. Check the code, or ask your friend to keep their tab open.', 'bad');
+      if (manualTarget === code && !inRoom) setEntryMsg(t('stillTrying', code), 'bad');
     }, 12000);
   }
   attachConn(peer.connect(PREFIX + code, { reliable: true }), myCode);
@@ -820,7 +1014,7 @@ function attachConn(c, initiator) {
     if (m.conn !== c) return;
     if (manualTarget === code) {
       clearTimeout(joinTimer);
-      setEntryMsg('Connected. Joining…');
+      setEntryMsg(t('connectedJoining'));
     }
     if (m.admitted) sendHello(m);
   });
@@ -831,7 +1025,7 @@ function attachConn(c, initiator) {
 
 function sendHello(m) {
   const others = joinedMembers().filter(x => x !== m && x.conn && x.conn.open).map(x => x.code);
-  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others, locked });
+  m.conn.send({ type: 'hello', name: displayName(), sharing: !!localStream, peers: others, locked, host: hostCode || myCode });
 }
 
 function onMessage(m, msg) {
@@ -854,9 +1048,13 @@ function onMessage(m, msg) {
       setName(m, msg.name);
       m.sharing = !!msg.sharing;
       if (first) {
-        // Joining someone's room: take on whether it's locked
-        if (manualTarget === m.code && typeof msg.locked === 'boolean') setLocked(msg.locked);
-        addSystem(m.name + ' joined');
+        // Joining someone's room: take on whether it's locked, and whose it is.
+        // Older versions don't say whose; then it's theirs.
+        if (manualTarget === m.code) {
+          if (typeof msg.locked === 'boolean') setLocked(msg.locked);
+          hostCode = typeof msg.host === 'string' ? msg.host : m.code;
+        }
+        addSystem(t('joined', m.name));
         // Introduce the newcomer to everyone else here
         for (const x of joinedMembers()) {
           if (x !== m && x.conn && x.conn.open) x.conn.send({ type: 'peers', peers: [m.code] });
@@ -875,7 +1073,7 @@ function onMessage(m, msg) {
     case 'name': {
       const old = m.name;
       setName(m, msg.name);
-      if (old !== m.name) addSystem(old + ' is now ' + m.name);
+      if (old !== m.name) addSystem(t('renamed', old, m.name));
       renderRow(m);
       updateRoomStatus();
       break;
@@ -883,26 +1081,29 @@ function onMessage(m, msg) {
     case 'sharing':
       m.sharing = !!msg.on;
       if (!m.sharing) removeTile(m);
-      addSystem(m.name + (m.sharing ? ' started sharing' : ' stopped sharing'));
+      addSystem(t(m.sharing ? 'startedSharing' : 'stoppedSharing', m.name));
       renderRow(m);
       break;
     case 'chat':
-      if (typeof msg.text === 'string' && msg.text.trim()) addChat(m.name, msg.text.slice(0, 500));
+      if (typeof msg.text === 'string' && msg.text.trim()) {
+        addChat(m.name, msg.text.slice(0, 500));
+        if (!document.body.classList.contains('side-open')) $('sideBtn').classList.add('unread');
+      }
       break;
     case 'bye':
       removeMember(m, true);
       break;
     case 'lock':
-      setLocked(msg.on, m.name);
+      if (m.code === hostCode) setLocked(msg.on, m.name);
       break;
     case 'waiting':
-      if (manualTarget === m.code) setEntryMsg('Connected. Waiting for them to let you in…');
+      if (manualTarget === m.code) setEntryMsg(t('waitingLetIn'));
       break;
     case 'denied':
       if (manualTarget === m.code) {
         manualTarget = null;
         clearTimeout(joinTimer);
-        setEntryMsg('They didn’t let you in. Ask them, then try again.', 'bad');
+        setEntryMsg(t('denied'), 'bad');
       }
       removeMember(m, false);
       break;
@@ -924,17 +1125,15 @@ function meet(peers) {
 }
 
 /* ---------- Asking to join ---------- */
-// who: 'You' when you changed it, a member's name when they did, nothing to change it quietly
+// who: true when you changed it, a member's name when they did, nothing to change it quietly
 function setLocked(on, who) {
   on = !!on;
   document.querySelector('input[name="entry"][value="' + (on ? 'locked' : 'open') + '"]').checked = true;
-  $('roomBtn').classList.toggle('locked', on);
-  $('roomBtn').querySelector('use').setAttribute('href', on ? '#i-lock' : '#i-unlock');
-  $('roomEyebrow').textContent = on ? 'Your room is locked' : 'Your room is open';
   if (on === locked) return;
   locked = on;
-  if (who) addSystem(who + (on ? ' locked the room' : ' unlocked the room'));
-  if (who === 'You') broadcast({ type: 'lock', on });
+  if (who === true) addSystem(t(on ? 'youLocked' : 'youUnlocked'));
+  else if (who) addSystem(t(on ? 'lockedBy' : 'unlockedBy', who));
+  if (who === true) broadcast({ type: 'lock', on });
   // Unlocking lets in anyone still waiting
   if (!on) for (const m of [...members.values()]) if (!m.admitted) letIn(m);
 }
@@ -944,9 +1143,9 @@ function showKnock(m) {
   const card = el('div', 'knock');
   const name = el('b', '', m.name);
   const text = el('p');
-  text.append(name, ' wants to join the room.');
-  const yes = el('button', 'btn primary', 'Let them in');
-  const no = el('button', 'btn ghost', 'Not now');
+  text.append(name, t('wantsIn'));
+  const yes = el('button', 'btn primary', t('letIn'));
+  const no = el('button', 'btn ghost', t('notNow'));
   yes.type = no.type = 'button';
   yes.addEventListener('click', () => letIn(m));
   no.addEventListener('click', () => turnAway(m));
@@ -1009,7 +1208,7 @@ function removeMember(m, announce) {
   removeTile(m);
   removeKnock(m);
   if (m.row) m.row.remove();
-  if (announce && m.joined) addSystem(m.name + ' left');
+  if (announce && m.joined) addSystem(t('left', m.name));
   updateRoomStatus();
 }
 
@@ -1022,6 +1221,8 @@ function leaveRoom() {
   for (const m of [...members.values()]) removeMember(m, false);
   vouched.clear();
   setLocked(false);
+  hostCode = null;
+  document.body.classList.remove('host');
   stopShare();
   closeMenus();
   manualTarget = null;
@@ -1035,24 +1236,18 @@ function leaveRoom() {
 function updateRoomStatus() {
   const others = joinedMembers();
   document.body.classList.toggle('paired', others.length > 0);
-  $('peopleTitle').textContent = 'In the room · ' + (others.length + 1);
   if (others.length && !inRoom) enterRoom(false);
-  if (!ready) setStatus('starting up…');
-  else if (!others.length) setStatus('just you so far', 'good');
-  else setStatus('with ' + nameList(others.map(m => m.name)), 'good');
+  setStatus('');                                    // the status line is only for problems
   updateDock();
 }
 
-// The lines of help text that depend on who is here
+// The lines of text that depend on who is here
 function updateDock() {
   const others = joinedMembers();
-  $('selfSub').textContent = others.length
-    ? nameList(others.map(m => m.name)) + ' can see it. Anything they share will take over this space.'
-    : '';
+  $('peopleTitle').textContent = t('inRoom', others.length + 1);
+  $('selfSub').textContent = others.length ? t('canSee', nameList(others.map(m => m.name)), others.length) : '';
   $('selfSub').hidden = !others.length;
-  $('dockHint').textContent = !canShare ? 'Sharing a screen needs a desktop browser.'
-    : others.length ? 'Anyone can share at the same time.'
-    : 'You can start sharing before anyone arrives.';
+  $('dockHint').textContent = canShare ? '' : t('needsDesktop');
 }
 
 /* ---------- Sending your screen ---------- */
@@ -1062,7 +1257,7 @@ async function startShare() {
     const id = await pickSource();
     if (!id) return;
     const plan = await window.screenRoomApp.choose(id);
-    if (!plan) { setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad'); return; }
+    if (!plan) { setStatus(t('shareFailedApp'), 'bad'); return; }
     appShare = { sound: plan.sound, ctx: null };
   }
   try {
@@ -1075,8 +1270,8 @@ async function startShare() {
       selfBrowserSurface: 'exclude',
     });
   } catch (e) {
-    if (e.name !== 'NotAllowedError') setStatus('Couldn’t start sharing: ' + e.message, 'bad');
-    else if (inApp) setStatus('Couldn’t share that. If it was a window, it may have closed. Try again.', 'bad');
+    if (e.name !== 'NotAllowedError') setStatus(t('shareFailed', e.message), 'bad');
+    else if (inApp) setStatus(t('shareFailedApp'), 'bad');
     appShare = null;
     return;
   }
@@ -1104,27 +1299,17 @@ function describeAudio(vt) {
   const what = '“' + vt.label + '”';
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
-    note.textContent = !inApp
-      ? (surface === 'monitor' ? 'Sharing all sound from your computer, including voice chat and notifications.' : 'Sound is being shared.')
-      : appShare.sound === 'window' ? 'Sharing ' + what + ' with only its own sound.'
-      : appShare.sound === 'others' ? 'Sharing ' + what + ' with all sound from your computer, except this room’s.'
-      : 'Sharing ' + what + ' with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.';
+    note.textContent = !inApp ? t(surface === 'monitor' ? 'soundAll' : 'soundOn')
+      : t(appShare.sound === 'window' ? 'soundWindow' : appShare.sound === 'others' ? 'soundOthers' : 'soundSystem', what);
     return;
   }
   note.className = 'dock-note warn';
-  if (inApp) {
-    note.textContent = 'No sound: the app couldn’t pick up sound for ' + what + '. Stop and share again to retry.';
-  } else if (navigator.userAgent.includes('Firefox')) {
-    note.textContent = 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.';
-  } else if (surface === 'window') {
-    note.textContent = 'No sound: this browser can’t share sound from a single window. Stop, then share your Entire screen with “Share system audio” ticked.';
-  } else if (surface === 'monitor') {
-    note.textContent = 'No sound: “Share system audio” wasn’t ticked. Stop and share again with it ticked.';
-  } else if (surface === 'browser') {
-    note.textContent = 'No sound: “Share tab audio” wasn’t ticked. Stop and share again with it ticked.';
-  } else {
-    note.textContent = 'No sound is being shared.';
-  }
+  note.textContent = inApp ? t('noSoundApp', what)
+    : navigator.userAgent.includes('Firefox') ? t('noSoundFirefox')
+    : surface === 'window' ? t('noSoundWindow')
+    : surface === 'monitor' ? t('noSoundMonitor')
+    : surface === 'browser' ? t('noSoundTab')
+    : t('noSoundAny');
 }
 
 /* ---------- The app's picker ---------- */
@@ -1152,19 +1337,21 @@ async function loadSources() {
   $('screenList').replaceChildren(...list.filter(s => s.kind === 'screen').map(sourceOption));
   $('windowList').replaceChildren(...list.filter(s => s.kind === 'window').map(sourceOption));
   $('windowEmpty').hidden = list.some(s => s.kind === 'window');
-  $('pickSound').textContent = split
-    ? 'A window shares only its own sound. A screen shares all sound except this room’s.'
-    : 'All sound from your computer is shared, whichever you pick.';
+  $('pickSound').textContent = t(split ? 'splitSound' : 'allSound');
   // Keep the choice across a refresh; otherwise start on the main screen
   const keep = list.find(s => s.id === picked) || list.find(s => s.primary) || list[0];
   selectSource(keep ? keep.id : null);
 }
 
 function sourceOption(s) {
+  // Screens come numbered, with their size; the words are ours
+  const name = s.kind === 'screen' ? t('screenN', s.number) : s.name;
+  const detail = s.minimised ? t('minimised')
+    : s.kind === 'screen' ? [s.size, s.primary && t('mainScreen')].filter(Boolean).join(' · ') : '';
   const b = el('button', 'src');
   b.type = 'button';
   b.dataset.id = s.id;
-  b.title = s.name;
+  b.title = name;
   // Minimised windows have no picture, so their app's icon stands in
   const shot = el('span', 'src-shot');
   if (s.thumbnail || s.icon) {
@@ -1180,9 +1367,8 @@ function sourceOption(s) {
     i.alt = '';
     label.append(i);
   }
-  label.append(el('span', 'src-name', s.name));
+  label.append(el('span', 'src-name', name));
   b.append(shot, label);
-  const detail = s.minimised ? 'Minimised · opens back up when you share' : s.detail;
   if (detail) b.append(el('span', 'src-detail', detail));
   b.addEventListener('click', () => selectSource(s.id));
   b.addEventListener('dblclick', () => { selectSource(s.id); $('picker').close('share'); });
@@ -1327,11 +1513,10 @@ function showStream(m, stream) {
 }
 
 // A labelled button on a stream; the label collapses to an icon on small tiles
-function tileButton(name, label) {
+function tileButton(name) {
   const b = el('button', 'btn glass');
   b.type = 'button';
   b.append(icon(name), el('span', 'lbl'));
-  setLabel(b, label);
   return b;
 }
 function setLabel(b, label) {
@@ -1341,7 +1526,7 @@ function setLabel(b, label) {
 }
 
 function createTile(m) {
-  const t = el('div', 'tile');
+  const tile = el('div', 'tile');
   const video = el('video');
   video.autoplay = true;
   video.playsInline = true;
@@ -1350,9 +1535,10 @@ function createTile(m) {
   const who = el('span', 'who');
   const whoText = el('span');
   const whoName = el('span', '', m.name);
-  whoText.append(whoName, el('span', 'tail', ' is sharing'));
+  const tail = el('span', 'tail');
+  whoText.append(whoName, tail);
   who.append(el('span', 'livedot'), whoText);
-  const silent = el('span', 'chip warn', 'no sound');
+  const silent = el('span', 'chip warn');
   silent.hidden = true;
   tag.append(who, silent);
 
@@ -1362,13 +1548,13 @@ function createTile(m) {
   const ui = el('div', 'tile-ui');
   m.tileVol = volControls(m);
   const actions = el('div', 'tile-actions');
-  const details = tileButton('signal', 'Details');
+  const details = tileButton('signal');
   details.setAttribute('aria-pressed', String(showDetails));
   details.addEventListener('click', () => setDetails(!showDetails));
-  const lay = tileButton('grid', 'Grid view');
+  const lay = tileButton('grid');
   lay.classList.add('layout-btn');
   lay.addEventListener('click', toggleLayout);
-  const pip = tileButton('pip', 'Pop out');
+  const pip = tileButton('pip');
   pip.hidden = !document.pictureInPictureEnabled;
   pip.addEventListener('click', async () => {
     try {
@@ -1376,47 +1562,76 @@ function createTile(m) {
       else await video.requestPictureInPicture();
     } catch (e) { console.warn('Picture-in-picture failed', e); }
   });
-  video.addEventListener('enterpictureinpicture', () => setLabel(pip, 'Pop back in'));
-  video.addEventListener('leavepictureinpicture', () => setLabel(pip, 'Pop out'));
+  video.addEventListener('enterpictureinpicture', () => setLabel(pip, t('popBackIn')));
+  video.addEventListener('leavepictureinpicture', () => setLabel(pip, t('popOut')));
+  const fill = tileButton('fill');
+  fill.addEventListener('click', () => fillPage(filled === m ? null : m));
   // Fullscreen the whole tile so the volume controls stay available
-  const fs = tileButton('full', 'Fullscreen');
+  const fs = tileButton('full');
   fs.addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen(); else t.requestFullscreen();
+    if (document.fullscreenElement) document.exitFullscreen(); else tile.requestFullscreen();
   });
-  actions.append(details, lay, pip, fs);
+  actions.append(details, lay, pip, fill, fs);
   ui.append(m.tileVol.root, actions);
 
-  t.append(video, tag, stats, ui);
+  tile.append(video, tag, stats, ui);
 
   // Controls wake when the pointer moves and fade again once it rests
   let sleep;
   const wake = () => {
-    t.classList.add('awake');
+    tile.classList.add('awake');
     clearTimeout(sleep);
-    sleep = setTimeout(() => { if (ui.matches(':hover') || ui.querySelector(':focus-visible')) wake(); else t.classList.remove('awake'); }, 2600);
+    sleep = setTimeout(() => { if (ui.matches(':hover') || ui.querySelector(':focus-visible')) wake(); else tile.classList.remove('awake'); }, 2600);
   };
-  t.addEventListener('pointermove', wake);
-  t.addEventListener('pointerdown', wake);
-  t.addEventListener('focusin', wake);
-  t.addEventListener('pointerleave', () => { clearTimeout(sleep); t.classList.remove('awake'); });
+  tile.addEventListener('pointermove', wake);
+  tile.addEventListener('pointerdown', wake);
+  tile.addEventListener('focusin', wake);
+  tile.addEventListener('pointerleave', () => { clearTimeout(sleep); tile.classList.remove('awake'); });
 
   const swap = () => { spotCode = m.code; updateStage(); };
-  t.addEventListener('click', e => {
+  tile.addEventListener('click', e => {
     if (layout !== 'spotlight' || spotCode === m.code || e.target.closest('button, input')) return;
     swap();
   });
-  t.addEventListener('keydown', e => {
-    if (e.target !== t || (e.key !== 'Enter' && e.key !== ' ')) return;
+  tile.addEventListener('keydown', e => {
+    if (e.target !== tile || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
     if (layout === 'spotlight' && spotCode !== m.code) swap();
   });
 
-  m.tile = { el: t, video, who: whoName, silent, stats, details };
-  $('streams').append(t);
+  m.tile = { el: tile, video, who: whoName, tail, silent, stats, details, pip, fill, fs };
+  labelTile(m);
+  $('streams').append(tile);
+}
+
+// The words on a stream; again whenever the language changes (the layout button is updateStage's)
+function labelTile(m) {
+  const x = m.tile;
+  x.tail.textContent = t('isSharing');
+  x.silent.textContent = t('noSound');
+  setLabel(x.details, t('details'));
+  setLabel(x.pip, t(document.pictureInPictureElement === x.video ? 'popBackIn' : 'popOut'));
+  setLabel(x.fill, t(filled === m ? 'shrinkBack' : 'fillPage'));
+  setLabel(x.fs, t('fullscreen'));
+}
+
+// One stream at a time can fill the page; it also takes the spotlight so its controls stay with it
+function fillPage(m) {
+  if (filled && filled.tile) {
+    filled.tile.el.classList.remove('filled');
+    setLabel(filled.tile.fill, t('fillPage'));
+  }
+  filled = m && m.tile ? m : null;
+  document.body.classList.toggle('filling', !!filled);
+  if (!filled) return;
+  filled.tile.el.classList.add('filled');
+  setLabel(filled.tile.fill, t('shrinkBack'));
+  if (spotCode !== m.code) { spotCode = m.code; updateStage(); }
 }
 
 function removeTile(m) {
   if (!m.tile) return;
+  if (filled === m) fillPage(null);
   if (document.pictureInPictureElement === m.tile.video) document.exitPictureInPicture().catch(() => {});
   if (document.fullscreenElement === m.tile.el) document.exitFullscreen().catch(() => {});
   m.tile.video.srcObject = null;
@@ -1452,26 +1667,53 @@ function updateStage() {
   document.body.classList.toggle('watching', tiles.length > 0);
   $('streams').className = 'streams ' + (tiles.length > 1 ? layout : 'spotlight solo');
   for (const m of tiles) {
-    const t = m.tile.el;
+    const tile = m.tile.el;
     const spot = m.code === spotCode;
-    t.classList.toggle('spot', spot);
+    tile.classList.toggle('spot', spot);
     // In spotlight view the small tiles act as buttons that swap the big one
     if (tiles.length > 1 && layout === 'spotlight' && !spot) {
-      t.tabIndex = 0;
-      t.setAttribute('role', 'button');
-      t.setAttribute('aria-label', 'Switch to ' + m.name + '’s screen');
+      tile.tabIndex = 0;
+      tile.setAttribute('role', 'button');
+      tile.setAttribute('aria-label', t('switchTo', m.name));
     } else {
-      t.removeAttribute('tabindex');
-      t.removeAttribute('role');
-      t.removeAttribute('aria-label');
+      tile.removeAttribute('tabindex');
+      tile.removeAttribute('role');
+      tile.removeAttribute('aria-label');
     }
   }
   for (const b of document.querySelectorAll('.layout-btn')) {
     b.hidden = tiles.length < 2;
-    setLabel(b, layout === 'spotlight' ? 'Grid view' : 'Spotlight view');
+    setLabel(b, t(layout === 'spotlight' ? 'gridView' : 'spotlightView'));
   }
   $('unmute').hidden = !(audioBlocked && tiles.length);
 }
+
+// The empty stage's dot. It stops whenever it's hidden (a screen is up), so nothing runs
+// meanwhile; the dot reappearing, or the stage changing size, is what starts it again.
+const bouncer = { x: 40, y: 30, dx: 1, dy: 1, last: 0, frame: 0 };
+const BOUNCE_SPEED = 70;                          // px a second
+function startBounce() {
+  if (!bouncer.frame) { bouncer.last = 0; bouncer.frame = requestAnimationFrame(bounce); }
+}
+function bounce(now) {
+  const b = bouncer, dot = $('bouncer'), box = dot.parentElement;
+  if (!dot.offsetParent) { b.frame = 0; return; }
+  const dt = b.last ? Math.min((now - b.last) / 1000, .1) : 0;
+  b.last = now;
+  // The 5px halo stays inside too
+  const halo = 5, maxX = box.clientWidth - dot.offsetWidth - halo, maxY = box.clientHeight - dot.offsetHeight - halo;
+  b.x += b.dx * BOUNCE_SPEED * dt;
+  b.y += b.dy * BOUNCE_SPEED * dt;
+  let hit = false;
+  if (b.x < halo) { b.x = halo; b.dx = 1; hit = true; } else if (b.x > maxX) { b.x = maxX; b.dx = -1; hit = true; }
+  if (b.y < halo) { b.y = halo; b.dy = 1; hit = true; } else if (b.y > maxY) { b.y = maxY; b.dy = -1; hit = true; }
+  if (hit) dot.classList.toggle('matcha');
+  dot.style.transform = 'translate(' + b.x + 'px, ' + b.y + 'px)';
+  b.frame = requestAnimationFrame(bounce);
+}
+const bounceWatch = new ResizeObserver(startBounce);
+bounceWatch.observe($('bouncer'));
+bounceWatch.observe(document.querySelector('.stage'));
 
 /* ---------- Per-person volume ---------- */
 function volControls(m) {
@@ -1507,11 +1749,11 @@ function applyAudio(m) {
   for (const ui of [m.tileVol, m.rowVol]) {
     if (!ui) continue;
     ui.range.value = m.volume;
-    ui.range.setAttribute('aria-label', 'Volume for ' + m.name);
+    ui.range.setAttribute('aria-label', t('volumeFor', m.name));
     ui.pct.textContent = m.volume + '%';
     ui.btn.classList.toggle('off', m.muted || m.volume === 0);
-    ui.btn.setAttribute('aria-label', (m.muted ? 'Unmute ' : 'Mute ') + m.name);
-    ui.btn.title = m.muted ? 'Unmute' : 'Mute';
+    ui.btn.setAttribute('aria-label', t(m.muted ? 'unmuteName' : 'muteName', m.name));
+    ui.btn.title = t(m.muted ? 'unmute' : 'mute');
     ui.btn.setAttribute('aria-pressed', String(m.muted));
   }
 }
@@ -1537,8 +1779,8 @@ function renderMe() {
   dot.style.background = colorFor(name);
   $('meDot').style.background = colorFor(name);
   const head = el('div', 'phead');
-  head.append(dot, el('span', 'pname', name), el('span', 'pyou', 'you'));
-  if (localStream) head.append(el('span', 'pstate live', 'sharing'));
+  head.append(dot, el('span', 'pname', name), el('span', 'pyou', t('you')));
+  if (localStream) head.append(el('span', 'pstate live', t('sharing')));
   row.replaceChildren(head);
 }
 
@@ -1547,7 +1789,7 @@ function renderRow(m) {
   if (!m.row) { m.row = el('li', 'person'); $('people').append(m.row); }
   const dot = el('span', 'dot');
   dot.style.background = colorFor(m.name);
-  const state = el('span', 'pstate' + (m.sharing ? ' live' : ''), m.sharing ? 'sharing' : 'watching');
+  const state = el('span', 'pstate' + (m.sharing ? ' live' : ''), t(m.sharing ? 'sharing' : 'watching'));
   const head = el('div', 'phead');
   head.append(dot, el('span', 'pname', m.name), state);
   m.row.replaceChildren(head);
@@ -1602,11 +1844,12 @@ async function statsChips(pc, dir, m) {
   if (codec) chips.push([codec.mimeType.replace('video/', '')]);
   if (pair) {
     const lc = stats.get(pair.localCandidateId);
-    if (lc) chips.push([lc.candidateType === 'relay' ? 'relayed' : 'direct', lc.candidateType === 'relay']);
+    if (lc) chips.push([t(lc.candidateType === 'relay' ? 'relayed' : 'direct'), lc.candidateType === 'relay']);
     if (pair.currentRoundTripTime != null) chips.push([`${Math.round(pair.currentRoundTripTime * 1000)} ms`]);
   }
   if (dir === 'out' && rtp.qualityLimitationReason && rtp.qualityLimitationReason !== 'none') {
-    chips.push([`limited by ${rtp.qualityLimitationReason}`, true]);
+    chips.push([t('limitedBy', rtp.qualityLimitationReason), true]);
+    chips.limited = true;
   }
   return chips;
 }
@@ -1629,11 +1872,11 @@ setInterval(async () => {
       if (m.outCall && m.outCall.peerConnection) {
         const chips = await statsChips(m.outCall.peerConnection, 'out', m);
         if (chips.length) {
-          if (chips.some(([t]) => t.startsWith('limited by'))) limited = true;
+          if (chips.limited) limited = true;
           const row = el('div', 'statrow');
           const line = el('span', 'statline');
           line.append(...chipEls(chips));
-          row.append(el('span', 'name', 'To ' + m.name), line);
+          row.append(el('span', 'name', t('toName', m.name)), line);
           outRows.push(row);
         }
       }
@@ -1671,9 +1914,9 @@ $('leaveBtn').addEventListener('click', leaveRoom);
 for (const b of document.querySelectorAll('.copy-invite')) {
   b.addEventListener('click', async () => {
     const lbl = b.querySelector('.lbl');
-    try { await navigator.clipboard.writeText(inviteUrl()); lbl.textContent = 'Link copied'; }
-    catch (e) { prompt('Copy this link:', inviteUrl()); }
-    setTimeout(() => lbl.textContent = b.dataset.label, 2000);
+    try { await navigator.clipboard.writeText(inviteUrl()); lbl.textContent = t('linkCopied'); }
+    catch (e) { prompt(t('copyThisLink'), inviteUrl()); }
+    setTimeout(() => lbl.textContent = t(lbl.dataset.t), 2000);
   });
 }
 
@@ -1704,13 +1947,22 @@ $('chatForm').addEventListener('submit', e => {
   if (!text) return;
   broadcast({ type: 'chat', text });
   addChat(displayName(), text);
-  if (!joinedMembers().length) addSystem('No one else is here yet');
+  if (!joinedMembers().length) addSystem(t('aloneHere'));
   $('chatInput').value = '';
 });
 
 $('unmute').addEventListener('click', unblockAudio);
 document.addEventListener('pointerdown', unblockAudio);
 document.addEventListener('keydown', unblockAudio);
+
+// People and chat stay out of the way until asked for; a dot marks messages that came in meanwhile
+$('sideBtn').addEventListener('click', () => {
+  const open = document.body.classList.toggle('side-open');
+  $('sideBtn').setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  $('sideBtn').classList.remove('unread');
+  $('chatLog').scrollTop = $('chatLog').scrollHeight;
+});
 
 // Room and stream settings each live in a menu; one is open at a time
 const MENUS = [['roomBtn', 'roomPanel', 'roomClose'], ['settingsBtn', 'settingsPanel', 'settingsClose']];
@@ -1734,11 +1986,13 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  for (const [btn, panel] of MENUS) if (!$(panel).hidden) { toggleMenu(btn, panel, false); $(btn).focus(); }
+  let closed = false;
+  for (const [btn, panel] of MENUS) if (!$(panel).hidden) { toggleMenu(btn, panel, false); $(btn).focus(); closed = true; }
+  if (!closed && filled) fillPage(null);
 });
 
 for (const r of document.querySelectorAll('input[name="entry"]')) {
-  r.addEventListener('change', () => setLocked(setting('entry') === 'locked', 'You'));
+  r.addEventListener('change', () => setLocked(setting('entry') === 'locked', true));
 }
 
 for (const r of document.querySelectorAll('input[name="quality"]')) {
@@ -1763,13 +2017,45 @@ for (const r of document.querySelectorAll('input[name="codec"]')) {
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
 
-if (inApp) $('soundFoot').textContent = 'Share any screen or window, with all your computer’s sound.';
+$('soundFoot').hidden = !inApp;
 $('pickRefresh').addEventListener('click', loadSources);
 
-if (!canShare) {
-  $('shareBtn').disabled = true;
-  $('shareBtn').title = 'Screen sharing needs a desktop browser over https';
+$('shareBtn').disabled = !canShare;
+
+// Put the whole page into the chosen language: the static text, then everything drawn from code
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.querySelector('input[name="lang"][value="' + lang + '"]').checked = true;
+  for (const e of document.querySelectorAll('[data-t]')) e.textContent = t(e.dataset.t);
+  for (const a of ['aria-label', 'title', 'placeholder']) {
+    for (const e of document.querySelectorAll('[data-t-' + a + ']')) e.setAttribute(a, t(e.getAttribute('data-t-' + a)));
+  }
+  if (!ready) $('inviteLink').textContent = t('gettingLink');
+  if (myCode) $('nameInput').placeholder = t('guestName', myCode.slice(0, 3));
+  sizeName();
+  $('soundFoot').textContent = t('appSoundFoot');
+  if (!canShare) $('shareBtn').title = t('needsHttps');
+  for (const m of members.values()) {
+    if (m.tile) labelTile(m);
+    renderRow(m);
+    if (m.knock) { removeKnock(m); showKnock(m); }
+  }
+  if (myCode) renderMe();
+  if (localStream) describeAudio(localStream.getVideoTracks()[0]);
+  updateDock();
+  updateStage();
 }
+
+for (const r of document.querySelectorAll('input[name="lang"]')) {
+  r.addEventListener('change', () => {
+    lang = setting('lang');
+    store.set('screenroom-lang', lang);
+    applyLanguage();
+    // Without a name of your own you're "Guest" or "Convidado"; tell the room which
+    if (!$('nameInput').value.trim()) broadcast({ type: 'name', name: displayName() });
+  });
+}
+applyLanguage();
 
 // Arriving from an invite link: show the code and wait for one click
 const invite = (new URLSearchParams(location.search).get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -1780,7 +2066,6 @@ if (invite) {
   ($('entryName').value ? $('joinBtn') : $('entryName')).focus();
 }
 
-updateDock();
 startPeer();
 </script>
 </body>

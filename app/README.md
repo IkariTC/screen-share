@@ -25,4 +25,4 @@ Both `start` and `build` first run:
 
 The installer isn't code-signed, so Windows shows "Windows protected your PC" when you run it. Choose **More info → Run anyway**. It installs for your account only; remove it from **Settings → Apps** like any other app.
 
-The app ships only Chromium's English locale, which keeps the download small. Spellcheck and chat times still follow your Windows language.
+The app ships only Chromium's English locale, which keeps the download small. Spellcheck and chat times still follow your Windows language, and so does the app's own: Brazilian Portuguese on a Portuguese Windows, English otherwise. Anyone can switch it from the gear menu in the room.

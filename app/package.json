@@ -1,7 +1,7 @@
 {
   "name": "screen-room",
   "productName": "Screen Room",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Screen Room as a Windows app, so sharing includes your computer's sound in any setup.",
   "private": true,
   "main": "main.js",

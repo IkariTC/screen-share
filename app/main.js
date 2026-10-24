@@ -144,7 +144,8 @@ function servePicker() {
         const d = displays.find(x => String(x.id) === s.display_id);
         const size = d ? Math.round(d.size.width * d.scaleFactor) + '×' + Math.round(d.size.height * d.scaleFactor) : '';
         const main = !!d && d.id === primary;
-        return { id: s.id, kind: 'screen', name: 'Screen ' + ++n, detail: [size, main && 'main'].filter(Boolean).join(' · '), primary: main, thumbnail: jpeg(s.thumbnail) };
+        // The page words the name and detail in its own language
+        return { id: s.id, kind: 'screen', number: ++n, size, primary: main, thumbnail: jpeg(s.thumbnail) };
       });
 
     // Minimised windows have no picture; show their app's icon instead

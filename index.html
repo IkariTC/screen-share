@@ -528,6 +528,15 @@
                 <label class="opt"><input type="radio" name="entry" value="locked"><span class="box two"><b data-t="locked">Locked</b><small data-t="lockedSub">you let people in</small></span></label>
               </div>
             </fieldset>
+            <!-- Each person picks their own, since it's their computer's sound; only the Windows app can do this -->
+            <fieldset id="discordSetting" hidden>
+              <legend data-t="discordSound">Discord’s sound</legend>
+              <div class="optgrid cols-2" id="discordOptions">
+                <label class="opt"><input type="radio" name="discord" value="blocked" checked><span class="box two"><b data-t="discordBlocked">Blocked</b><small data-t="discordBlockedSub">friends won’t hear it</small></span></label>
+                <label class="opt"><input type="radio" name="discord" value="included"><span class="box two"><b data-t="discordIncluded">Enabled</b><small data-t="discordIncludedSub">friends hear it</small></span></label>
+              </div>
+              <p class="hint small" id="discordNote" data-t="discordCant" hidden></p>
+            </fieldset>
             <!-- Each person picks their own; the names stay in their own language -->
             <fieldset>
               <legend data-t="language">Language</legend>
@@ -699,6 +708,8 @@ const LANGS = {
     needsHttps: 'Screen sharing needs a desktop browser over https',
     roomSettings: 'Room settings', closeRoomSettings: 'Close room settings',
     whoCanCome: 'Who can come in', open: 'Open', openSub: 'anyone with the link', locked: 'Locked', lockedSub: 'you let people in',
+    discordSound: 'Discord’s sound', discordBlocked: 'Blocked', discordBlockedSub: 'friends won’t hear it', discordIncluded: 'Enabled', discordIncludedSub: 'friends hear it',
+    discordCant: 'This PC can’t separate one app’s sound, so Discord can’t be blocked here.',
     language: 'Language',
     peopleChat: 'People and chat',
     streamSettings: 'Stream settings', closeSettings: 'Close settings',
@@ -737,6 +748,7 @@ const LANGS = {
     soundOn: 'Sound is being shared.',
     soundWindow: what => 'Sharing ' + what + ' with only its own sound.',
     soundOthers: what => 'Sharing ' + what + ' with all sound from your computer, except this room’s.',
+    soundNoDiscord: what => 'Sharing ' + what + ' with all sound from your computer, except Discord. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.',
     soundSystem: what => 'Sharing ' + what + ' with all sound from your computer. Friends’ streams are muted here meanwhile, so they don’t hear themselves back.',
     noSoundApp: what => 'No sound: the app couldn’t pick up sound for ' + what + '. Stop and share again to retry.',
     noSoundFirefox: 'No sound: Firefox can’t share sound. Use Chrome or Edge to include it.',
@@ -769,6 +781,8 @@ const LANGS = {
     needsHttps: 'Compartilhar a tela precisa de um navegador de computador com https',
     roomSettings: 'Configurações da sala', closeRoomSettings: 'Fechar configurações da sala',
     whoCanCome: 'Quem pode entrar', open: 'Aberta', openSub: 'qualquer pessoa com o link', locked: 'Trancada', lockedSub: 'você aprova quem entra',
+    discordSound: 'Som do Discord', discordBlocked: 'Bloqueado', discordBlockedSub: 'amigos não ouvem', discordIncluded: 'Ativado', discordIncludedSub: 'amigos ouvem',
+    discordCant: 'Este PC não consegue separar o som de um app, então o Discord não pode ser bloqueado aqui.',
     language: 'Idioma',
     peopleChat: 'Pessoas e chat',
     streamSettings: 'Configurações da transmissão', closeSettings: 'Fechar configurações',
@@ -807,6 +821,7 @@ const LANGS = {
     soundOn: 'O som está sendo compartilhado.',
     soundWindow: what => 'Compartilhando ' + what + ' só com o próprio som.',
     soundOthers: what => 'Compartilhando ' + what + ' com todo o som do seu computador, exceto o desta sala.',
+    soundNoDiscord: what => 'Compartilhando ' + what + ' com todo o som do seu computador, exceto o do Discord. As transmissões dos seus amigos ficam sem som aqui enquanto isso, para eles não ouvirem o próprio som de volta.',
     soundSystem: what => 'Compartilhando ' + what + ' com todo o som do seu computador. As transmissões dos seus amigos ficam sem som aqui enquanto isso, para eles não ouvirem o próprio som de volta.',
     noSoundApp: what => 'Sem som: o app não conseguiu captar o som de ' + what + '. Pare e compartilhe de novo para tentar outra vez.',
     noSoundFirefox: 'Sem som: o Firefox não compartilha som. Use o Chrome ou o Edge para incluir o som.',
@@ -1256,7 +1271,7 @@ async function startShare() {
   if (inApp) {
     const id = await pickSource();
     if (!id) return;
-    const plan = await window.screenRoomApp.choose(id);
+    const plan = await window.screenRoomApp.choose(id, setting('discord') === 'blocked');
     if (!plan) { setStatus(t('shareFailedApp'), 'bad'); return; }
     appShare = { sound: plan.sound, ctx: null };
   }
@@ -1300,7 +1315,7 @@ function describeAudio(vt) {
   if (localStream.getAudioTracks().length) {
     note.className = 'dock-note';
     note.textContent = !inApp ? t(surface === 'monitor' ? 'soundAll' : 'soundOn')
-      : t(appShare.sound === 'window' ? 'soundWindow' : appShare.sound === 'others' ? 'soundOthers' : 'soundSystem', what);
+      : t({ window: 'soundWindow', others: 'soundOthers', nodiscord: 'soundNoDiscord', system: 'soundSystem' }[appShare.sound], what);
     return;
   }
   note.className = 'dock-note warn';
@@ -1381,9 +1396,18 @@ function selectSource(id) {
   $('pickShare').disabled = !id;
 }
 
-// The app captures the sound itself (just the chosen window's app, or everything but this room)
+// The app captures the sound itself (just the chosen window's app, or everything but this room or Discord)
 // and streams the raw samples here; a worklet turns them into the stream's sound track.
-let appShare = null;   // while sharing in the app: { sound: 'window' | 'others' | 'system', ctx }
+let appShare = null;   // while sharing in the app: { sound: 'window' | 'others' | 'nodiscord' | 'system', ctx }
+
+// What a whole-screen share is leaving out, which changes if Discord opens or closes mid-share
+function setLeftOut(who) {
+  if (!appShare) return;
+  appShare.sound = who === 'discord' ? 'nodiscord' : 'others';
+  if (!localStream || !localStream.getAudioTracks().length) return;
+  describeAudio(localStream.getVideoTracks()[0]);
+  for (const m of members.values()) applyAudio(m);  // see echoGuard
+}
 
 async function appSoundTrack() {
   const ctx = new AudioContext({ sampleRate: 48000 });
@@ -1396,7 +1420,7 @@ async function appSoundTrack() {
       const samples = new Float32Array(bytes.byteLength / 4);
       new Uint8Array(samples.buffer).set(bytes);
       feed.port.postMessage(samples.buffer, [samples.buffer]);
-    });
+    }, setLeftOut);
     if (!started) throw new Error('the sound helper didn’t start');
     await ctx.resume();
     appShare.ctx = ctx;
@@ -1737,9 +1761,9 @@ function volControls(m) {
   return { root, btn, range, pct };
 }
 
-// When the app has to fall back to Windows' whole sound mix, friends' streams playing here would go
-// straight back out to them. (The app's own capture leaves this room out, so it needs no muting.)
-const echoGuard = () => inApp && !!localStream && !!appShare && appShare.sound === 'system' && localStream.getAudioTracks().length > 0;
+// When the app has to fall back to Windows' whole sound mix, or uses its one exclusion on Discord, friends'
+// streams playing here would go straight back out to them. (Otherwise the capture leaves this room out, so it needs no muting.)
+const echoGuard = () => inApp && !!localStream && !!appShare && (appShare.sound === 'system' || appShare.sound === 'nodiscord') && localStream.getAudioTracks().length > 0;
 
 function applyAudio(m) {
   if (m.tile) {
@@ -2012,6 +2036,22 @@ for (const r of document.querySelectorAll('input[name="mode"]')) {
 for (const r of document.querySelectorAll('input[name="codec"]')) {
   r.addEventListener('change', () => {
     if (localStream) for (const m of joinedMembers()) callMember(m);
+  });
+}
+
+// Discord stays out of a shared screen unless you've chosen otherwise; PCs that can't capture single apps can't do it
+if (inApp) {
+  $('discordSetting').hidden = false;
+  if (store.get('screenroom-discord') === 'included') document.querySelector('input[name="discord"][value="included"]').checked = true;
+  window.screenRoomApp.canSplitSound().then(split => {
+    $('discordOptions').hidden = !split;
+    $('discordNote').hidden = split;
+  });
+}
+for (const r of document.querySelectorAll('input[name="discord"]')) {
+  r.addEventListener('change', () => {
+    store.set('screenroom-discord', setting('discord'));
+    if (localStream) window.screenRoomApp.setDiscordBlocked(setting('discord') === 'blocked');
   });
 }
 

@@ -1,7 +1,8 @@
 // Screen Room as a Windows app. It runs the same page as the website, with two differences:
 // you pick any screen or window (minimised ones too) from the app's own picker, and sharing
 // includes sound, which Firefox can't do. A window brings only its own sound; a screen brings
-// everything except Screen Room itself, so friends never hear themselves back.
+// everything except Screen Room itself, so friends never hear themselves back, or everything
+// except Discord if that's blocked and open (friends' streams are then muted on your end instead).
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain, net, protocol, screen, session, shell } = require('electron');
 const { execFile, spawn } = require('child_process');
 const path = require('path');
@@ -159,7 +160,9 @@ function servePicker() {
     return { sources: listed.concat(hidden), split };
   });
 
-  ipcMain.handle('choose', async (e, id) => {
+  ipcMain.handle('can-split', e => fromPage(e) && canSplitSound());
+
+  ipcMain.handle('choose', async (e, id, blockDiscord) => {
     if (!fromPage(e) || typeof id !== 'string' || !SOURCE_ID.test(id)) return null;
     const [kind, num] = id.split(':');
     if (kind === 'window') {
@@ -170,40 +173,57 @@ function servePicker() {
     }
     const split = await canSplitSound();
     const sound = !split ? 'system' : kind === 'window' ? 'window' : 'others';
-    const args = sound === 'window' ? ['window', num] : sound === 'others' ? ['except', String(process.pid)] : null;
+    const args = sound === 'window' ? ['window', num] : sound === 'others' ? screenArgs(blockDiscord) : null;
     chosen = { id, sound, args };
     return { sound };
   });
 
-  // Sound for the capture that just started, streamed to the page as raw 48 kHz stereo float samples
+  // Sound for the capture that just started
   ipcMain.handle('sound-start', e => {
     if (!fromPage(e) || !soundArgs) return false;
     const args = soundArgs;
     soundArgs = null;
-    stopSound();
-    return new Promise(resolve => {
-      const child = spawn(HELPER, args, { windowsHide: true });
-      capturing = child;
-      let settled = false, rest = Buffer.alloc(0);
-      const settle = ok => { if (!settled) { settled = true; resolve(ok); } };
-      child.stderr.on('data', d => {
-        const text = String(d).trim();
-        if (text === 'ready') settle(true);
-        else console.error('Sound helper:', text);
-      });
-      child.stdout.on('data', d => {
-        // Only whole frames (2 channels × 4 bytes) go to the page, each in its own exact-size copy
-        const b = rest.length ? Buffer.concat([rest, d]) : d;
-        const whole = b.length - (b.length % 8);
-        rest = b.subarray(whole);
-        if (whole && !e.sender.isDestroyed()) e.sender.send('sound', new Uint8Array(b.subarray(0, whole)));
-      });
-      child.on('error', () => settle(false));
-      child.on('exit', () => { settle(false); if (capturing === child) capturing = null; });
-      setTimeout(() => settle(false), 5000);
-    });
+    return runHelper(e.sender, args);
+  });
+  // The Discord setting changed mid-share: swap the capture underneath, and the shared track carries on
+  ipcMain.handle('sound-discord', (e, blockDiscord) => {
+    if (!fromPage(e) || !capturing || !/^except/.test(capturing.spawnargs[1])) return false;
+    return runHelper(e.sender, screenArgs(blockDiscord));
   });
   ipcMain.handle('sound-stop', e => { if (fromPage(e)) stopSound(); });
+}
+
+// The helper command for a whole screen's sound
+const screenArgs = blockDiscord => [blockDiscord === true ? 'except-discord' : 'except', String(process.pid)];
+
+// Runs the helper and streams its sound to the page as raw 48 kHz stereo float samples.
+// Resolves with whether it started.
+function runHelper(page, args) {
+  stopSound();
+  return new Promise(resolve => {
+    const child = spawn(HELPER, args, { windowsHide: true });
+    capturing = child;
+    let settled = false, rest = Buffer.alloc(0);
+    const settle = ok => { if (!settled) { settled = true; resolve(ok); } };
+    child.stderr.on('data', d => {
+      for (const line of String(d).split(/\r?\n/).filter(Boolean)) {
+        const leftOut = /^leaving out (room|discord)$/.exec(line);
+        if (line === 'ready') settle(true);
+        else if (!leftOut) console.error('Sound helper:', line);
+        else if (capturing === child && !page.isDestroyed()) page.send('sound-left-out', leftOut[1]);
+      }
+    });
+    child.stdout.on('data', d => {
+      // Only whole frames (2 channels × 4 bytes) go to the page, each in its own exact-size copy
+      const b = rest.length ? Buffer.concat([rest, d]) : d;
+      const whole = b.length - (b.length % 8);
+      rest = b.subarray(whole);
+      if (whole && !page.isDestroyed()) page.send('sound', new Uint8Array(b.subarray(0, whole)));
+    });
+    child.on('error', () => settle(false));
+    child.on('exit', () => { settle(false); if (capturing === child) capturing = null; });
+    setTimeout(() => settle(false), 5000);
+  });
 }
 
 function stopSound() {

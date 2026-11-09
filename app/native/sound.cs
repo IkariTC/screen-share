@@ -7,10 +7,14 @@
 //   screen-room-sound restore <hwnd>     un-minimises a window (leaves others alone)
 //   screen-room-sound window <hwnd>      streams the sound of that window's app
 //   screen-room-sound except <pid>       streams all sound except that process and its children
+//   screen-room-sound except-discord <pid>   streams all sound except Discord; while Discord is closed, except that process
+//   screen-room-sound discord            prints the process id of Discord's main process, or 0
 //
 // Sound goes to stdout as raw 48 kHz stereo 32-bit float; "ready" goes to stderr once it's flowing.
+// The except commands also say "leaving out room" or "leaving out discord" on stderr, and again if that changes.
 // Closing stdin stops it.
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -34,15 +38,27 @@ static class Program
                 return 0;
             }
             if (cmd == "windows") { Write(MinimisedWindowsJson()); return 0; }
+            if (cmd == "discord") { Write(FindDiscord(0).ToString()); return 0; }
             if (cmd == "restore" && args.Length > 1)
             {
                 IntPtr hwnd = Hwnd(args[1]);
                 if (IsIconic(hwnd)) ShowWindowAsync(hwnd, 9);   // SW_RESTORE
                 return 0;
             }
-            if (cmd == "window" && args.Length > 1) return Capture(ProcessForWindow(Hwnd(args[1])), false);
-            if (cmd == "except" && args.Length > 1) return Capture(uint.Parse(args[1]), true);
-            Console.Error.WriteLine("usage: screen-room-sound probe | windows | restore <hwnd> | window <hwnd> | except <pid>");
+            if (cmd == "window" && args.Length > 1) return Capture(ProcessForWindow(Hwnd(args[1])), false, null);
+            if (cmd == "except" && args.Length > 1)
+            {
+                room = uint.Parse(args[1]);
+                return Capture(room, true, null);
+            }
+            if (cmd == "except-discord" && args.Length > 1)
+            {
+                room = uint.Parse(args[1]);
+                uint discord = 0;
+                Func<uint> target = () => { discord = FindDiscord(discord); return discord != 0 ? discord : room; };
+                return Capture(target(), true, target);
+            }
+            Console.Error.WriteLine("usage: screen-room-sound probe | windows | discord | restore <hwnd> | window <hwnd> | except <pid> | except-discord <pid>");
             return 64;
         }
         catch (Exception e)
@@ -69,7 +85,32 @@ static class Program
 
     /* ---------- Capturing ---------- */
 
-    static int Capture(uint pid, bool exclude)
+    const int LookEveryMs = 2000;   // how often except-discord checks whether Discord has opened or closed
+
+    static uint room;               // Screen Room's own process, on the except commands
+
+    class Source
+    {
+        public IAudioClient Client;
+        public IAudioCaptureClient Reader;
+        public AutoResetEvent PacketReady;
+
+        public void Close()
+        {
+            Client.Stop();
+            Marshal.ReleaseComObject(Reader);
+            Marshal.ReleaseComObject(Client);
+            PacketReady.Dispose();
+        }
+    }
+
+    static void Say(string line)
+    {
+        Console.Error.WriteLine(line);
+        Console.Error.Flush();
+    }
+
+    static Source Open(uint pid, bool exclude)
     {
         IAudioClient client = Activate(pid, exclude);
         Initialize(client);
@@ -78,7 +119,24 @@ static class Program
         Guid iid = typeof(IAudioCaptureClient).GUID;
         object service;
         Check(client.GetService(ref iid, out service), "GetService");
-        var capture = (IAudioCaptureClient)service;
+        Check(client.Start(), "Start");
+        return new Source { Client = client, Reader = (IAudioCaptureClient)service, PacketReady = packetReady };
+    }
+
+    // Starts capturing and tells Screen Room what's left out, so it can mute friends' streams in time:
+    // before the room's own sound can be picked up, and only once it's safely out again.
+    static Source Aim(uint pid, bool exclude)
+    {
+        if (room != 0 && pid != room) Say("leaving out discord");
+        Source source = Open(pid, exclude);
+        if (room != 0 && pid == room) Say("leaving out room");
+        return source;
+    }
+
+    // target, if given, is asked now and then what should be left out by now
+    static int Capture(uint pid, bool exclude, Func<uint> target)
+    {
+        Source source = Aim(pid, exclude);
 
         // Screen Room closing our stdin means it has stopped sharing (or quit)
         var watch = new Thread(() =>
@@ -91,27 +149,47 @@ static class Program
 
         Stream stdout = Console.OpenStandardOutput();
         byte[] buf = new byte[Rate * FrameBytes];
-        Check(client.Start(), "Start");
-        Console.Error.WriteLine("ready");
-        Console.Error.Flush();
+        Say("ready");
 
+        int lastLook = Environment.TickCount;
         while (true)
         {
-            packetReady.WaitOne(100);
+            source.PacketReady.WaitOne(100);
+            if (target != null && Environment.TickCount - lastLook >= LookEveryMs)
+            {
+                lastLook = Environment.TickCount;
+                uint next = target();
+                if (next != pid)
+                {
+                    try
+                    {
+                        Source fresh = Aim(next, exclude);
+                        source.Close();
+                        source = fresh;
+                        pid = next;
+                    }
+                    catch (Exception e)
+                    {
+                        // Carry on as we were and try again at the next look
+                        Say("error: " + e.Message);
+                        if (pid == room) Say("leaving out room");
+                    }
+                }
+            }
             while (true)
             {
                 uint frames;
-                Check(capture.GetNextPacketSize(out frames), "GetNextPacketSize");
+                Check(source.Reader.GetNextPacketSize(out frames), "GetNextPacketSize");
                 if (frames == 0) break;
                 IntPtr data;
                 uint flags;
                 ulong position, qpc;
-                Check(capture.GetBuffer(out data, out frames, out flags, out position, out qpc), "GetBuffer");
+                Check(source.Reader.GetBuffer(out data, out frames, out flags, out position, out qpc), "GetBuffer");
                 int bytes = (int)frames * FrameBytes;
                 if (bytes > buf.Length) buf = new byte[bytes];
                 if ((flags & 2) != 0) Array.Clear(buf, 0, bytes);      // AUDCLNT_BUFFERFLAGS_SILENT
                 else Marshal.Copy(data, buf, 0, bytes);
-                capture.ReleaseBuffer(frames);
+                source.Reader.ReleaseBuffer(frames);
                 try { stdout.Write(buf, 0, bytes); stdout.Flush(); }
                 catch (IOException) { return 0; }                       // Screen Room has gone
             }
@@ -137,6 +215,7 @@ static class Program
         IActivateAudioInterfaceAsyncOperation op;
         Check(ActivateAudioInterfaceAsync("VAD\\Process_Loopback", ref iid, variant, done, out op), "Starting per-app capture");
         if (!done.Finished.WaitOne(5000)) throw new Exception("per-app capture didn't start in time");
+        Marshal.FinalReleaseComObject(op);      // it keeps the capture alive, and the same app then can't be captured again
         Check(done.Result, "Per-app capture");
         return (IAudioClient)done.Client;
     }
@@ -172,6 +251,58 @@ static class Program
             Finished.Set();
             return 0;
         }
+    }
+
+    /* ---------- Finding Discord ---------- */
+
+    static bool IsDiscord(string exe)
+    {
+        return exe.Equals("Discord.exe", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("DiscordPTB.exe", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("DiscordCanary.exe", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("DiscordDevelopment.exe", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Discord's main process, whose tree holds all its sound: a Discord that wasn't started by another Discord.
+    // Only one can be left out, so keep the one we have while it's running; otherwise take the one with the
+    // most children, which is the real client rather than a launcher or updater. 0 if Discord isn't open.
+    static uint FindDiscord(uint keep)
+    {
+        var exes = new Dictionary<uint, string>();
+        var parents = new Dictionary<uint, uint>();
+        IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);   // TH32CS_SNAPPROCESS
+        if (snapshot == new IntPtr(-1)) return keep;
+        try
+        {
+            var entry = new ProcessEntry { Size = Marshal.SizeOf(typeof(ProcessEntry)) };
+            for (bool more = Process32First(snapshot, ref entry); more; more = Process32Next(snapshot, ref entry))
+            {
+                exes[entry.Id] = entry.ExeFile;
+                parents[entry.Id] = entry.ParentId;
+            }
+        }
+        finally { CloseHandle(snapshot); }
+
+        var mains = new Dictionary<uint, int>();            // Discord's main processes, and how many children each has
+        foreach (var process in exes)
+        {
+            string parentExe;
+            if (IsDiscord(process.Value) && !(exes.TryGetValue(parents[process.Key], out parentExe) && IsDiscord(parentExe)))
+                mains[process.Key] = 0;
+        }
+        foreach (var process in exes)
+        {
+            if (IsDiscord(process.Value) && mains.ContainsKey(parents[process.Key])) mains[parents[process.Key]]++;
+        }
+
+        if (mains.ContainsKey(keep)) return keep;
+        uint best = 0;
+        int most = -1;
+        foreach (var main in mains)
+        {
+            if (main.Value > most) { best = main.Key; most = main.Value; }
+        }
+        return best;
     }
 
     /* ---------- Windows ---------- */
@@ -267,6 +398,22 @@ static class Program
     [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder path, ref int size);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", EntryPoint = "Process32FirstW", CharSet = CharSet.Unicode)] static extern bool Process32First(IntPtr snapshot, ref ProcessEntry entry);
+    [DllImport("kernel32.dll", EntryPoint = "Process32NextW", CharSet = CharSet.Unicode)] static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry entry);
+
+    // PROCESSENTRY32W
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct ProcessEntry
+    {
+        public int Size;
+        public uint Usage, Id;
+        public IntPtr DefaultHeap;
+        public uint ModuleId, Threads, ParentId;
+        public int BasePriority;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
 }
 
 [ComImport, Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

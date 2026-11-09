@@ -5,6 +5,7 @@ The same room as the website, as a Windows app. One small installer puts it in y
 - **Share my screen** opens a picker with every screen and window (browser, game, Discord…), minimised windows included. A minimised window opens back up when you share it.
 - **A window shares only its own sound.** Share a game and your friends hear the game, not your Discord call or notifications.
 - **A screen shares all your computer's sound except this room's**, so friends never hear themselves back.
+- **Discord stays out of a shared screen by default.** While it's open, friends' streams are muted on your end instead of being left out of the capture, because Windows can only leave out one app. Change it in the gear menu, even mid-share.
 - On Windows 10 before build 20348 (late 2021), Windows can't capture one app's sound. There, everything your computer plays goes out, and friends' streams are muted on your end while you share.
 - Invite links point at the website; friends can open them in any browser, or type the code into the app.
 

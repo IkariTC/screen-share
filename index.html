@@ -537,6 +537,14 @@
               </div>
               <p class="hint small" id="discordNote" data-t="discordCant" hidden></p>
             </fieldset>
+            <!-- Each person picks their own; it only changes what they hear -->
+            <fieldset>
+              <legend data-t="chimes">Join and leave sounds</legend>
+              <div class="optgrid cols-2">
+                <label class="opt"><input type="radio" name="chimes" value="on" checked><span class="box two"><b data-t="chimesOn">On</b><small data-t="chimesOnSub">a soft chord</small></span></label>
+                <label class="opt"><input type="radio" name="chimes" value="off"><span class="box two"><b data-t="chimesOff">Off</b><small data-t="chimesOffSub">silent</small></span></label>
+              </div>
+            </fieldset>
             <!-- Each person picks their own; the names stay in their own language -->
             <fieldset>
               <legend data-t="language">Language</legend>
@@ -710,6 +718,7 @@ const LANGS = {
     whoCanCome: 'Who can come in', open: 'Open', openSub: 'anyone with the link', locked: 'Locked', lockedSub: 'you let people in',
     discordSound: 'Discord’s sound', discordBlocked: 'Blocked', discordBlockedSub: 'friends won’t hear it', discordIncluded: 'Enabled', discordIncludedSub: 'friends hear it',
     discordCant: 'This PC can’t separate one app’s sound, so Discord can’t be blocked here.',
+    chimes: 'Join and leave sounds', chimesOn: 'On', chimesOnSub: 'a soft chord', chimesOff: 'Off', chimesOffSub: 'silent',
     language: 'Language',
     peopleChat: 'People and chat',
     streamSettings: 'Stream settings', closeSettings: 'Close settings',
@@ -783,6 +792,7 @@ const LANGS = {
     whoCanCome: 'Quem pode entrar', open: 'Aberta', openSub: 'qualquer pessoa com o link', locked: 'Trancada', lockedSub: 'você aprova quem entra',
     discordSound: 'Som do Discord', discordBlocked: 'Bloqueado', discordBlockedSub: 'amigos não ouvem', discordIncluded: 'Ativado', discordIncludedSub: 'amigos ouvem',
     discordCant: 'Este PC não consegue separar o som de um app, então o Discord não pode ser bloqueado aqui.',
+    chimes: 'Sons de entrada e saída', chimesOn: 'Ligados', chimesOnSub: 'um acorde suave', chimesOff: 'Desligados', chimesOffSub: 'silêncio',
     language: 'Idioma',
     peopleChat: 'Pessoas e chat',
     streamSettings: 'Configurações da transmissão', closeSettings: 'Fechar configurações',
@@ -929,6 +939,7 @@ function setEntryMode(mode) {
 function enterRoom(opened) {
   if (inRoom) return;
   inRoom = true;
+  roomSince = performance.now();
   clearTimeout(joinTimer);
   setEntryMsg('');
   document.body.classList.add('in-room');
@@ -1070,6 +1081,8 @@ function onMessage(m, msg) {
           hostCode = typeof msg.host === 'string' ? msg.host : m.code;
         }
         addSystem(t('joined', m.name));
+        // Only for people who come in after you: everyone already here says hello as you arrive
+        if (inRoom && performance.now() - roomSince > 2500) chime('join');
         // Introduce the newcomer to everyone else here
         for (const x of joinedMembers()) {
           if (x !== m && x.conn && x.conn.open) x.conn.send({ type: 'peers', peers: [m.code] });
@@ -1223,7 +1236,10 @@ function removeMember(m, announce) {
   removeTile(m);
   removeKnock(m);
   if (m.row) m.row.remove();
-  if (announce && m.joined) addSystem(t('left', m.name));
+  if (announce && m.joined) {
+    addSystem(t('left', m.name));
+    if (inRoom) chime('leave');
+  }
   updateRoomStatus();
 }
 
@@ -1782,6 +1798,96 @@ function applyAudio(m) {
   }
 }
 
+/* ---------- Join and leave sounds ---------- */
+// A soft Dm9 on a muted, slightly worn piano, made here rather than loaded so the app needs no sound file.
+// Rolled up when someone comes in; rolled back down, softer and darker, when someone goes.
+// Notes are [midi note, seconds after the first, loudness].
+const CHIMES = {
+  join:  { bright: 0.9, notes: [[50, 0, 0.85], [53, 0.04, 0.75], [57, 0.08, 0.75], [60, 0.12, 0.7], [64, 0.16, 0.7]] },
+  leave: { bright: 0.7, notes: [[64, 0, 0.6], [60, 0.045, 0.55], [57, 0.09, 0.55], [53, 0.135, 0.55], [50, 0.18, 0.6]] },
+};
+let chimeCtx = null, lastChime = 0, roomSince = 0;
+
+function chime(kind) {
+  // Off in the gear menu, or the capture would carry it to friends (see echoGuard)
+  if (setting('chimes') === 'off' || echoGuard()) return;
+  const asked = performance.now();
+  if (asked - lastChime < 1200) return;            // several at once (a crowd leaving) sound as one
+  lastChime = asked;
+  try {
+    const C = chimeCtx || (chimeCtx = new AudioContext());
+    if (C.state === 'running') return playChime(C, kind);
+    // Not allowed to make sound yet: play it if that changes straight away, never late
+    C.resume().then(() => { if (performance.now() - asked < 800) playChime(C, kind); }).catch(() => {});
+  } catch (e) {}
+}
+
+function playChime(C, kind) {
+  const { bright, notes } = CHIMES[kind];
+  const t0 = C.currentTime + 0.02, len = 2.2;
+  // Shared tape: rolled-off highs, a little saturation, then quiet
+  const tone = C.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 2500; tone.Q.value = 0.4;
+  const sat = C.createWaveShaper(); sat.curve = tapeCurve(1.4); sat.oversample = '2x';
+  const out = C.createGain(); out.gain.value = 0.16;
+  tone.connect(sat); sat.connect(out); out.connect(C.destination);
+  // Wobble: a slow pitch drift and a faint flutter, in cents, like a worn cassette
+  const wob = C.createGain();
+  for (const [rate, cents] of [[0.5 + Math.random() * 0.7, 9], [5.5 + Math.random() * 2, 2]]) {
+    const lfo = C.createOscillator(), depth = C.createGain();
+    lfo.frequency.value = rate; depth.gain.value = cents;
+    lfo.connect(depth); depth.connect(wob); lfo.start(t0); lfo.stop(t0 + len);
+  }
+  for (const [midi, at, vel] of notes) feltNote(C, tone, t0 + at, 440 * 2 ** ((midi - 69) / 12), vel, bright, wob);
+  tapeDust(C, tone, t0, len - 0.1);
+}
+
+// One felt-piano note: a triangle and a quiet octave through a closing filter, with a muffled hammer
+function feltNote(C, dst, t, f, vel, bright, wob) {
+  const decay = 1.8;
+  const filter = C.createBiquadFilter(); filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(f * 6 * bright, t);
+  filter.frequency.exponentialRampToValueAtTime(f * 1.6 * bright, t + 0.7);
+  filter.connect(dst);
+  const amp = C.createGain();
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.exponentialRampToValueAtTime(0.2 * vel, t + 0.014);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.014 + decay);
+  amp.connect(filter);
+  for (const [type, mult, level] of [['triangle', 1, 1], ['sine', 2.003, 0.3]]) {
+    const o = C.createOscillator(), g = C.createGain();
+    o.type = type; o.frequency.value = f * mult; g.gain.value = level;
+    wob.connect(o.detune); o.connect(g); g.connect(amp);
+    o.start(t); o.stop(t + decay + 0.1);
+  }
+  const sr = C.sampleRate, n = Math.floor(sr * 0.04), buf = C.createBuffer(1, n, sr), x = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) x[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.008));
+  const hammer = C.createBufferSource(), muffle = C.createBiquadFilter(), hg = C.createGain();
+  hammer.buffer = buf; muffle.type = 'lowpass'; muffle.frequency.value = 700; hg.gain.value = 0.05 * vel;
+  hammer.connect(muffle); muffle.connect(hg); hg.connect(dst); hammer.start(t);
+}
+
+// Faint hiss with the odd vinyl tick under the chord
+function tapeDust(C, dst, t, len) {
+  const sr = C.sampleRate, n = Math.floor(sr * len), buf = C.createBuffer(1, n, sr), x = buf.getChannelData(0);
+  const amt = 0.25;
+  let tick = 0;
+  for (let i = 0; i < n; i++) {
+    const fade = Math.min(1, i / (sr * 0.04), (n - i) / (sr * 0.25));
+    if (Math.random() < 0.00025 * amt) tick = (Math.random() * 0.5 + 0.2) * (Math.random() < 0.5 ? -1 : 1);
+    x[i] = ((Math.random() * 2 - 1) * 0.006 + tick) * amt * fade;
+    tick *= 0.6;
+  }
+  const src = C.createBufferSource(), band = C.createBiquadFilter();
+  src.buffer = buf; band.type = 'bandpass'; band.frequency.value = 2400; band.Q.value = 0.5;
+  src.connect(band); band.connect(dst); src.start(t);
+}
+
+function tapeCurve(k) {
+  const n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / Math.tanh(k); }
+  return c;
+}
+
 // Any click or key press counts as permission to play sound
 function unblockAudio() {
   if (!audioBlocked) return;
@@ -2053,6 +2159,12 @@ for (const r of document.querySelectorAll('input[name="discord"]')) {
     store.set('screenroom-discord', setting('discord'));
     if (localStream) window.screenRoomApp.setDiscordBlocked(setting('discord') === 'blocked');
   });
+}
+
+// Join and leave sounds are on unless you've turned them off
+if (store.get('screenroom-chimes') === 'off') document.querySelector('input[name="chimes"][value="off"]').checked = true;
+for (const r of document.querySelectorAll('input[name="chimes"]')) {
+  r.addEventListener('change', () => store.set('screenroom-chimes', setting('chimes')));
 }
 
 window.addEventListener('pagehide', () => broadcast({ type: 'bye' }));
